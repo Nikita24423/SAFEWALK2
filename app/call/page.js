@@ -1,0 +1,136 @@
+"use client";
+
+import { useEffect, useMemo, useRef, useState } from "react";
+import BottomNav from "@/components/BottomNav";
+import RoleSwitch from "@/components/RoleSwitch";
+
+const ROLE_KEY = "safewalk_role";
+
+export default function CallPage() {
+  const [callStarted, setCallStarted] = useState(false);
+  const [role, setRole] = useState("peaceful");
+  const audioRef = useRef({ ctx: null, osc: null, gain: null });
+
+  useEffect(() => {
+    const savedRole = localStorage.getItem(ROLE_KEY);
+    setRole(savedRole === "guardian" ? "guardian" : "peaceful");
+  }, []);
+
+  const isGuardian = useMemo(() => role === "guardian", [role]);
+
+  useEffect(() => {
+    const handler = () => {
+      const savedRole = localStorage.getItem(ROLE_KEY);
+      setRole(savedRole === "guardian" ? "guardian" : "peaceful");
+    };
+    window.addEventListener("storage", handler);
+    window.addEventListener("focus", handler);
+    return () => {
+      window.removeEventListener("storage", handler);
+      window.removeEventListener("focus", handler);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!callStarted) {
+      if (audioRef.current.osc) {
+        audioRef.current.osc.stop();
+        audioRef.current.osc.disconnect();
+        audioRef.current.osc = null;
+      }
+      if (audioRef.current.gain) {
+        audioRef.current.gain.disconnect();
+        audioRef.current.gain = null;
+      }
+      return;
+    }
+
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    if (!AudioCtx) {
+      return;
+    }
+
+    if (!audioRef.current.ctx) {
+      audioRef.current.ctx = new AudioCtx();
+    }
+
+    const ctx = audioRef.current.ctx;
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = "triangle";
+    osc.frequency.value = 440;
+    gain.gain.value = 0.03;
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start();
+    audioRef.current.osc = osc;
+    audioRef.current.gain = gain;
+
+    return () => {
+      if (audioRef.current.osc) {
+        audioRef.current.osc.stop();
+        audioRef.current.osc.disconnect();
+        audioRef.current.osc = null;
+      }
+      if (audioRef.current.gain) {
+        audioRef.current.gain.disconnect();
+        audioRef.current.gain = null;
+      }
+    };
+  }, [callStarted]);
+
+  if (isGuardian) {
+    return (
+      <>
+        <div className="container">
+          <div className="top-bar">
+            <RoleSwitch />
+          </div>
+          <h1>Маршрут</h1>
+          <p className="meta">Пользователь: Demo User</p>
+          <p className="meta">Точка: Минск (53.9006, 27.5590)</p>
+
+          <div className="map-frame">
+            <iframe
+              title="Карта Google Maps - Минск"
+              src="https://maps.google.com/maps?q=53.9006,27.5590&z=16&output=embed"
+            />
+          </div>
+        </div>
+        <BottomNav active="call" />
+      </>
+    );
+  }
+
+  return (
+    <>
+      <div className="call-screen">
+        <div className="top-bar top-bar-call">
+          <RoleSwitch />
+        </div>
+
+        <div className="caller-info">
+          <div className="call-status">{callStarted ? "Вызов..." : "Готов к набору"}</div>
+          <div className="caller-name">Служба безопасности</div>
+          <div className="caller-number">SafeWalk Help</div>
+        </div>
+
+        <div className="action-area">
+          <button
+            type="button"
+            className={`call-button ${callStarted ? "call-button-danger" : ""}`}
+            onClick={() => setCallStarted((prev) => !prev)}
+            aria-label={callStarted ? "Завершить звонок" : "Начать звонок"}
+          >
+            <svg className={`phone-icon ${callStarted ? "rotated" : ""}`} viewBox="0 0 24 24" fill="currentColor">
+              <path d="M6.62 10.79c1.44 2.83 3.76 5.14 6.59 6.59l2.2-2.2c.28-.28.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1-9.39 0-17-7.61-17-17 0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.2 2.2z" />
+            </svg>
+          </button>
+
+        </div>
+      </div>
+
+      <BottomNav active="call" />
+    </>
+  );
+}
