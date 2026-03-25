@@ -2,34 +2,10 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import BottomNav from "@/components/BottomNav";
-import RoleSwitch from "@/components/RoleSwitch";
-
-const ROLE_KEY = "safewalk_role";
 
 export default function CallPage() {
   const [callStarted, setCallStarted] = useState(false);
-  const [role, setRole] = useState("peaceful");
   const audioRef = useRef({ ctx: null, osc: null, gain: null });
-
-  useEffect(() => {
-    const savedRole = localStorage.getItem(ROLE_KEY);
-    setRole(savedRole === "guardian" ? "guardian" : "peaceful");
-  }, []);
-
-  const isGuardian = useMemo(() => role === "guardian", [role]);
-
-  useEffect(() => {
-    const handler = () => {
-      const savedRole = localStorage.getItem(ROLE_KEY);
-      setRole(savedRole === "guardian" ? "guardian" : "peaceful");
-    };
-    window.addEventListener("storage", handler);
-    window.addEventListener("focus", handler);
-    return () => {
-      window.removeEventListener("storage", handler);
-      window.removeEventListener("focus", handler);
-    };
-  }, []);
 
   useEffect(() => {
     if (!callStarted) {
@@ -79,35 +55,10 @@ export default function CallPage() {
     };
   }, [callStarted]);
 
-  if (isGuardian) {
-    return (
-      <>
-        <div className="container">
-          <div className="top-bar">
-            <RoleSwitch />
-          </div>
-          <h1>Маршрут</h1>
-          <p className="meta">Пользователь: Demo User</p>
-          <p className="meta">Точка: Минск (53.9006, 27.5590)</p>
-
-          <div className="map-frame">
-            <iframe
-              title="Карта Google Maps - Минск"
-              src="https://maps.google.com/maps?q=53.9006,27.5590&z=16&output=embed"
-            />
-          </div>
-        </div>
-        <BottomNav active="call" />
-      </>
-    );
-  }
-
   return (
     <>
       <div className="call-screen">
-        <div className="top-bar top-bar-call">
-          <RoleSwitch />
-        </div>
+        <div className="top-bar top-bar-call" />
 
         <div className="caller-info">
           <div className="call-status">{callStarted ? "Вызов..." : "Готов к набору"}</div>

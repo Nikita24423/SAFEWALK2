@@ -20,10 +20,17 @@ body {
 
 .container {
   flex: 1;
-  padding: 20px 24px 100px;
-  max-width: 640px;
+  padding: 16px 16px 100px;
+  max-width: 420px;
   margin: 0 auto;
   width: 100%;
+}
+
+.call-screen,
+.sos-container {
+  max-width: 420px;
+  width: 100%;
+  margin: 0 auto;
 }
 
 .top-bar {
@@ -42,46 +49,8 @@ body {
   justify-content: flex-end;
 }
 
-.role-toggle {
-  position: absolute;
-  opacity: 0;
-  pointer-events: none;
-}
-
-.role-switch {
-  display: inline-block;
-  background: rgba(34, 197, 94, 0.2);
-  backdrop-filter: blur(10px);
-  padding: 8px 18px;
-  border-radius: 40px;
-  font-size: 14px;
-  font-weight: 600;
-  color: #166534;
-  cursor: pointer;
-  transition: none;
-  border: 1px solid rgba(34, 197, 94, 0.3);
-}
-
-.role-switch .guardian-text {
-  display: none;
-}
-
-.role-toggle:checked + .role-switch {
-  background: #22c55e;
-  border-color: #ffffff;
-  color: #ffffff;
-}
-
-.role-toggle:checked + .role-switch .peaceful-text {
-  display: none;
-}
-
-.role-toggle:checked + .role-switch .guardian-text {
-  display: inline;
-}
-
 h1 {
-  font-size: 32px;
+  font-size: 28px;
   color: #1f4f2d;
   margin-bottom: 8px;
 }
@@ -124,6 +93,48 @@ h1 {
   border: 1px solid rgba(34, 197, 94, 0.3);
 }
 
+.features {
+  margin: 14px 0 12px;
+}
+
+.features-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.features-list li {
+  background: rgba(255, 255, 255, 0.65);
+  border: 1px solid rgba(34, 197, 94, 0.28);
+  border-radius: 14px;
+  padding: 10px 12px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #14532d;
+  line-height: 1.25;
+  text-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.features-list li:nth-child(odd) {
+  background: rgba(34, 197, 94, 0.08);
+}
+
+.features-list li:last-child {
+  grid-column: 1 / -1;
+}
+
+@media (max-width: 360px) {
+  .features-list {
+    grid-template-columns: 1fr;
+  }
+}
+
 label {
   display: block;
   margin: 16px 0 8px;
@@ -153,7 +164,7 @@ textarea:focus {
 
 .btn {
   display: inline-block;
-  padding: 12px 24px;
+  padding: 12px 18px;
   border-radius: 12px;
   text-decoration: none;
   font-weight: 600;
@@ -709,6 +720,7 @@ textarea:focus {
   overflow: hidden;
   border: 1px solid #86efac;
   height: 320px;
+  position: relative;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
 }
 
@@ -718,12 +730,21 @@ textarea:focus {
   border: 0;
 }
 
+.map-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
 .bottom-nav {
   position: fixed;
-  left: 50%;
-  transform: translateX(-50%);
-  bottom: 16px;
-  width: min(640px, 92vw);
+  left: 12px;
+  right: 12px;
+  margin: 0 auto;
+  bottom: 12px;
+  width: auto;
+  max-width: 420px;
   display: flex;
   gap: 8px;
   justify-content: space-between;
@@ -731,7 +752,7 @@ textarea:focus {
   backdrop-filter: blur(10px);
   border-radius: 48px;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
-  padding: 8px 12px;
+  padding: 8px 10px;
   z-index: 100;
 }
 
@@ -745,6 +766,10 @@ textarea:focus {
   border-radius: 40px;
   font-size: 14px;
   transition: all 0.2s;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .nav-link.active {
@@ -755,16 +780,24 @@ textarea:focus {
 .nav-link.sos {
   background: #dc2626;
   color: #ffffff;
-  width: 56px;
-  height: 56px;
+  width: 52px;
+  height: 52px;
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 0;
-  margin-top: -18px;
+  margin-top: -14px;
   box-shadow: 0 8px 20px rgba(220, 38, 38, 0.4);
-  font-size: 28px;
+  font-size: 26px;
+  flex: 0 0 auto;
+}
+
+/* iOS safe-area (bottom) */
+@supports (padding-bottom: env(safe-area-inset-bottom)) {
+  .bottom-nav {
+    bottom: calc(12px + env(safe-area-inset-bottom));
+  }
 }
 
 .call-screen {
@@ -772,7 +805,7 @@ textarea:focus {
   flex-direction: column;
   justify-content: space-between;
   align-items: center;
-  padding: 20px 24px 100px;
+  padding: 16px 16px 100px;
   min-height: 100vh;
 }
 
@@ -834,9 +867,7 @@ textarea:focus {
 }
 
 .sos-container {
-  max-width: 600px;
-  margin: 0 auto;
-  padding: 20px 24px 100px;
+  padding: 16px 16px 100px;
   min-height: 100vh;
   text-align: center;
 }
@@ -954,11 +985,11 @@ textarea:focus {
 
 @media (max-width: 480px) {
   .container {
-    padding: 16px 20px 100px;
+    padding: 14px 14px 100px;
   }
 
   h1 {
-    font-size: 28px;
+    font-size: 26px;
   }
 
   .caller-name {
@@ -982,5 +1013,16 @@ textarea:focus {
 
   .sos-text {
     font-size: 44px;
+  }
+}
+
+@media (min-width: 768px) {
+  body {
+    padding: 18px 0;
+  }
+
+  .container {
+    padding-left: 16px;
+    padding-right: 16px;
   }
 }

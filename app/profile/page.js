@@ -2,16 +2,13 @@
 
 import { useEffect, useRef, useState } from "react";
 import BottomNav from "@/components/BottomNav";
-import RoleSwitch from "@/components/RoleSwitch";
 
-const ROLE_KEY = "safewalk_role";
 const PROFILE_KEY = "safewalk_profile";
 const ROUTE_HISTORY_KEY = "safewalk_route_history";
 const CONTACTS_HISTORY_KEY = "safewalk_contacts_history";
 const FALSE_CALL_HISTORY_KEY = "safewalk_false_call_history";
-const ROLE_CHANGE_EVENT = "safewalk-role-change";
-const SHOW_SWITCH_KEY = "safewalk_show_role_switch";
-const SWITCH_VISIBILITY_EVENT = "safewalk-role-switch-visibility-change";
+const SHAKE_SOS_KEY = "safewalk_shake_sos_enabled";
+const GEO_SEND_KEY = "safewalk_geo_send_enabled";
 const GOOGLE_MAPS_SCRIPT_ID = "google-maps-places-script";
 
 const SUBSCRIPTION_PLANS = [
@@ -47,7 +44,10 @@ export default function ProfilePage() {
   const [profile, setProfile] = useState(initialProfile);
   const [saved, setSaved] = useState(false);
   const [saveError, setSaveError] = useState("");
-  const [showRoleSwitch, setShowRoleSwitch] = useState(true);
+  const [shakeSosEnabled, setShakeSosEnabled] = useState(false);
+  const [geoSendEnabled, setGeoSendEnabled] = useState(false);
+  const [geoStatus, setGeoStatus] = useState("");
+  const [geoCoords, setGeoCoords] = useState(null);
   const [showRouteFields, setShowRouteFields] = useState(false);
   const [showContactFields, setShowContactFields] = useState(false);
   const [showTimerFields, setShowTimerFields] = useState(false);
@@ -74,6 +74,7 @@ export default function ProfilePage() {
   const routeFromRef = useRef(null);
   const routeToRef = useRef(null);
   const timerSectionRef = useRef(null);
+  const geoWatchIdRef = useRef(null);
   const fakeCallAudioRef = useRef({ ctx: null, osc: null, gain: null });
   const fakeCallFileAudioRef = useRef(null);
   const fakeCallAutoCloseTimeoutRef = useRef(null);
@@ -81,10 +82,8 @@ export default function ProfilePage() {
   const previewSynthRef = useRef({ ctx: null, osc: null, gain: null });
 
   useEffect(() => {
-    const rawRole = localStorage.getItem(ROLE_KEY);
     const rawProfile = localStorage.getItem(PROFILE_KEY);
 
-    let role = normalizeRole(rawRole);
     let parsedProfile = null;
 
     if (rawProfile) {
@@ -97,7 +96,7 @@ export default function ProfilePage() {
 
     setProfile({
       name: parsedProfile?.name ?? "",
-      role: normalizeRole(parsedProfile?.role ?? role),
+      role: normalizeRole(parsedProfile?.role),
       route: parsedProfile?.route ?? "",
       route_from: parsedProfile?.route_from ?? "",
       route_to: parsedProfile?.route_to ?? "",
@@ -138,8 +137,54 @@ export default function ProfilePage() {
     } catch (_error) {}
     setShowRouteFields(Boolean(parsedProfile?.route));
     setShowContactFields(Boolean(parsedProfile?.emergency_phone || parsedProfile?.telegram_username));
-    setShowRoleSwitch(localStorage.getItem(SHOW_SWITCH_KEY) !== "false");
+    setShakeSosEnabled(localStorage.getItem(SHAKE_SOS_KEY) === "true");
+    setGeoSendEnabled(localStorage.getItem(GEO_SEND_KEY) === "true");
   }, []);
+
+  useEffect(() => {
+    if (!geoSendEnabled) {
+      if (geoWatchIdRef.current != null && "geolocation" in navigator) {
+        navigator.geolocation.clearWatch(geoWatchIdRef.current);
+      }
+      geoWatchIdRef.current = null;
+      setGeoStatus("");
+      return;
+    }
+
+    if (!("geolocation" in navigator)) {
+      setGeoStatus("Геолокация не поддерживается");
+      return;
+    }
+
+    setGeoStatus("Запрашиваем доступ к геолокации...");
+    geoWatchIdRef.current = navigator.geolocation.watchPosition(
+      (position) => {
+        const next = { lat: position.coords.latitude, lng: position.coords.longitude };
+        setGeoCoords(next);
+        setGeoStatus("Геолокация отправляется");
+        try {
+          localStorage.setItem("safewalk_last_coords", JSON.stringify({ ...next, ts: Date.now() }));
+        } catch (_error) {}
+      },
+      (error) => {
+        const message =
+          error?.code === 1
+            ? "Доступ к геолокации запрещён"
+            : error?.code === 2
+              ? "Не удалось определить местоположение"
+              : "Ошибка геолокации";
+        setGeoStatus(message);
+      },
+      { enableHighAccuracy: true, maximumAge: 5000, timeout: 15000 },
+    );
+
+    return () => {
+      if (geoWatchIdRef.current != null) {
+        navigator.geolocation.clearWatch(geoWatchIdRef.current);
+        geoWatchIdRef.current = null;
+      }
+    };
+  }, [geoSendEnabled]);
 
   useEffect(() => {
     const minutes = Number(profile.timer_minutes || 0);
@@ -147,18 +192,6 @@ export default function ProfilePage() {
       setTimerSecondsLeft(minutes * 60);
     }
   }, [profile.timer_minutes, timerRunning]);
-
-  useEffect(() => {
-    const onRoleChange = (event) => {
-      const nextRole = normalizeRole(event?.detail);
-      setProfile((prev) => ({ ...prev, role: nextRole }));
-    };
-
-    window.addEventListener(ROLE_CHANGE_EVENT, onRoleChange);
-    return () => {
-      window.removeEventListener(ROLE_CHANGE_EVENT, onRoleChange);
-    };
-  }, []);
 
   useEffect(() => {
     if (!saved) {
@@ -358,11 +391,6 @@ export default function ProfilePage() {
   function setField(field, value) {
     const nextValue = field === "role" ? normalizeRole(value) : value;
     setProfile((prev) => ({ ...prev, [field]: nextValue }));
-
-    if (field === "role") {
-      localStorage.setItem(ROLE_KEY, nextValue);
-      window.dispatchEvent(new CustomEvent(ROLE_CHANGE_EVENT, { detail: nextValue }));
-    }
   }
 
   function saveProfile() {
@@ -393,7 +421,6 @@ export default function ProfilePage() {
     };
     try {
       localStorage.setItem(PROFILE_KEY, JSON.stringify(data));
-      localStorage.setItem(ROLE_KEY, data.role);
       setProfile(data);
       setSaveError("");
       setSaved(true);
@@ -421,11 +448,16 @@ export default function ProfilePage() {
     window.open(link, "_blank", "noopener,noreferrer");
   }
 
-  function onSwitchVisibilityChange(event) {
+  function onShakeSosChange(event) {
     const nextValue = event.target.checked;
-    setShowRoleSwitch(nextValue);
-    localStorage.setItem(SHOW_SWITCH_KEY, String(nextValue));
-    window.dispatchEvent(new CustomEvent(SWITCH_VISIBILITY_EVENT, { detail: nextValue }));
+    setShakeSosEnabled(nextValue);
+    localStorage.setItem(SHAKE_SOS_KEY, String(nextValue));
+  }
+
+  function onGeoSendChange(event) {
+    const nextValue = event.target.checked;
+    setGeoSendEnabled(nextValue);
+    localStorage.setItem(GEO_SEND_KEY, String(nextValue));
   }
 
   function formatSeconds(value) {
@@ -733,7 +765,6 @@ export default function ProfilePage() {
           <button className="btn-payment" type="button" onClick={openPremiumModal}>
             💳 Premium
           </button>
-          <RoleSwitch />
         </div>
 
         <h1>Профиль</h1>
@@ -1115,18 +1146,38 @@ export default function ProfilePage() {
           ) : null}
 
           <div className="switch-row">
-            <label className="toggle-switch" htmlFor="show-role-switch">
+            <label className="toggle-switch" htmlFor="shake-sos-switch">
               <input
-                id="show-role-switch"
-                name="show-role-switch"
+                id="shake-sos-switch"
+                name="shake-sos-switch"
                 type="checkbox"
-                checked={showRoleSwitch}
-                onChange={onSwitchVisibilityChange}
+                checked={shakeSosEnabled}
+                onChange={onShakeSosChange}
               />
               <span className="toggle-slider" aria-hidden="true" />
             </label>
-            <span className="switch-row-text">менять роль везде</span>
+            <span className="switch-row-text">Экстренный вызов при тряске</span>
           </div>
+
+          <div className="switch-row">
+            <label className="toggle-switch" htmlFor="geo-send-switch">
+              <input
+                id="geo-send-switch"
+                name="geo-send-switch"
+                type="checkbox"
+                checked={geoSendEnabled}
+                onChange={onGeoSendChange}
+              />
+              <span className="toggle-slider" aria-hidden="true" />
+            </label>
+            <span className="switch-row-text">Отправлять геолокацию</span>
+          </div>
+          {geoStatus ? <div className="meta">{geoStatus}</div> : null}
+          {geoCoords ? (
+            <div className="meta">
+              Координаты: {geoCoords.lat.toFixed(5)}, {geoCoords.lng.toFixed(5)}
+            </div>
+          ) : null}
 
           <p className="profile-saved-msg" hidden={!saved}>
             Сохранено

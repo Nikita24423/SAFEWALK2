@@ -1,13 +1,10 @@
 import BottomNav from "@/components/BottomNav";
-import RoleSwitch from "@/components/RoleSwitch";
 
 export default function GuardianPage() {
   return (
     <>
       <div className="container">
-        <div className="top-bar">
-          <RoleSwitch />
-        </div>
+        <div className="top-bar" />
 
         <h1>Панель хранителя</h1>
         <div className="meta">Пользователь: Demo User</div>
