@@ -6,6 +6,7 @@ import BottomNav from "@/components/BottomNav";
 const PROFILE_KEY = "safewalk_profile";
 const ROUTE_HISTORY_KEY = "safewalk_route_history";
 const CONTACTS_HISTORY_KEY = "safewalk_contacts_history";
+const SOS_TARGETS_KEY = "safewalk_sos_targets";
 const FALSE_CALL_HISTORY_KEY = "safewalk_false_call_history";
 const SHAKE_SOS_KEY = "safewalk_shake_sos_enabled";
 const GEO_SEND_KEY = "safewalk_geo_send_enabled";
@@ -21,13 +22,18 @@ const SUBSCRIPTION_PLANS = [
   },
 ];
 
-function normalizeRole(role) {
-  return role === "guardian" ? "guardian" : "peaceful";
+const SITUATION_VALUES = ["late_walk", "stranger_date", "unknown_place", "unplanned_meeting"];
+
+function normalizeSituation(value) {
+  if (SITUATION_VALUES.includes(value)) return value;
+  if (value === "peaceful") return "late_walk";
+  if (value === "guardian") return "stranger_date";
+  return "late_walk";
 }
 
 const initialProfile = {
   name: "",
-  role: "peaceful",
+  role: "late_walk",
   route: "",
   route_from: "",
   route_to: "",
@@ -96,7 +102,7 @@ export default function ProfilePage() {
 
     setProfile({
       name: parsedProfile?.name ?? "",
-      role: normalizeRole(parsedProfile?.role),
+      role: normalizeSituation(parsedProfile?.role),
       route: parsedProfile?.route ?? "",
       route_from: parsedProfile?.route_from ?? "",
       route_to: parsedProfile?.route_to ?? "",
@@ -389,7 +395,7 @@ export default function ProfilePage() {
   }, [showRouteFields]);
 
   function setField(field, value) {
-    const nextValue = field === "role" ? normalizeRole(value) : value;
+    const nextValue = field === "role" ? normalizeSituation(value) : value;
     setProfile((prev) => ({ ...prev, [field]: nextValue }));
   }
 
@@ -407,7 +413,7 @@ export default function ProfilePage() {
     const data = {
       ...profile,
       name: profile.name.trim(),
-      role: normalizeRole(profile.role),
+      role: normalizeSituation(profile.role),
       route: profile.route.trim(),
       route_from: profile.route_from.trim(),
       route_to: profile.route_to.trim(),
@@ -673,6 +679,32 @@ export default function ProfilePage() {
     setShowContactEditor(false);
   }
 
+  function removeContactByIndex(index) {
+    setContactsHistory((prev) => {
+      if (index < 0 || index >= prev.length) return prev;
+      const next = prev.filter((_, i) => i !== index);
+      try {
+        localStorage.setItem(CONTACTS_HISTORY_KEY, JSON.stringify(next));
+      } catch (_error) {}
+      try {
+        const rawPrefs = localStorage.getItem(SOS_TARGETS_KEY);
+        if (rawPrefs) {
+          const prefs = JSON.parse(rawPrefs);
+          if (prefs.mode === "selected" && Array.isArray(prefs.selectedIndices)) {
+            const remapped = prefs.selectedIndices
+              .filter((i) => i !== index)
+              .map((i) => (i > index ? i - 1 : i));
+            localStorage.setItem(
+              SOS_TARGETS_KEY,
+              JSON.stringify({ ...prefs, selectedIndices: remapped }),
+            );
+          }
+        }
+      } catch (_error) {}
+      return next;
+    });
+  }
+
   function applyContactFromHistory(entry) {
     if (!entry) return;
     setField("contact_name", entry.contact_name || "");
@@ -782,7 +814,7 @@ export default function ProfilePage() {
             onChange={(event) => setField("name", event.target.value)}
           />
 
-          <label htmlFor="role">Роль</label>
+          <label htmlFor="role">Ситуация</label>
           <select
             id="role"
             name="role"
@@ -790,8 +822,10 @@ export default function ProfilePage() {
             value={profile.role}
             onChange={(event) => setField("role", event.target.value)}
           >
-            <option value="peaceful">Мирный</option>
-            <option value="guardian">Защитник</option>
+            <option value="late_walk">Поздняя прогулка</option>
+            <option value="stranger_date">Свидание с незнакомцем</option>
+            <option value="unknown_place">Незнакомое место</option>
+            <option value="unplanned_meeting">Незапланированная встреча</option>
           </select>
 
           <div className="add-actions">
@@ -906,17 +940,22 @@ export default function ProfilePage() {
               {contactsHistory.length ? (
                 <div className="contacts-list">
                   {contactsHistory.map((item, index) => (
-                    <button
-                      key={`${item.contact_name}-${item.emergency_phone}-${item.telegram_username}-${item.instagram_username}-${index}`}
-                      type="button"
-                      className="contact-item"
-                      onClick={() => applyContactFromHistory(item)}
-                    >
-                      <strong>{item.contact_name || "Без имени"}</strong>
-                      <span>{item.emergency_phone || "Телефон не указан"}</span>
-                      <span>{item.telegram_username || "Telegram не указан"}</span>
-                      <span>{item.instagram_username || "Instagram не указан"}</span>
-                    </button>
+                    <div className="contact-row" key={`${item.contact_name}-${item.emergency_phone}-${item.telegram_username}-${item.instagram_username}-${index}`}>
+                      <button type="button" className="contact-item" onClick={() => applyContactFromHistory(item)}>
+                        <strong>{item.contact_name || "Без имени"}</strong>
+                        <span>{item.emergency_phone || "Телефон не указан"}</span>
+                        <span>{item.telegram_username || "Telegram не указан"}</span>
+                        <span>{item.instagram_username || "Instagram не указан"}</span>
+                      </button>
+                      <button
+                        type="button"
+                        className="contact-remove-btn"
+                        aria-label="Удалить контакт"
+                        onClick={() => removeContactByIndex(index)}
+                      >
+                        -
+                      </button>
+                    </div>
                   ))}
                 </div>
               ) : (
