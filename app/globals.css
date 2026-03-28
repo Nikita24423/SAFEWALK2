@@ -41,8 +41,43 @@ body {
 }
 
 .top-bar-profile {
-  justify-content: space-between;
+  justify-content: flex-end;
   align-items: center;
+}
+
+.top-bar-profile-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.btn-lang {
+  background: transparent;
+  color: #1f4f2d;
+  border: 2px solid #22c55e;
+  border-radius: 40px;
+  padding: 6px 16px;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.2s, color 0.2s, border-color 0.2s;
+}
+
+.btn-lang:hover {
+  background: rgba(34, 197, 94, 0.12);
+}
+
+.btn-lang-active {
+  background: #22c55e;
+  color: #ffffff;
+  border-color: #15803d;
+}
+
+.btn-lang-active:hover {
+  background: #15803d;
+  color: #ffffff;
 }
 
 .top-bar-call {
@@ -777,6 +812,49 @@ textarea:focus {
   margin-top: 6px;
 }
 
+.shake-fake-call-fields {
+  margin: 0 0 8px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(34, 197, 94, 0.3);
+  background: rgba(255, 255, 255, 0.85);
+}
+
+/* Сразу под переключателем «Ложный вызов при тряске» — меньше зазор сверху */
+.switch-row + .shake-fake-call-fields {
+  margin-top: -6px;
+}
+
+.shake-fake-call-row {
+  margin-bottom: 6px;
+}
+
+.shake-fake-call-row:last-of-type {
+  margin-bottom: 0;
+}
+
+.shake-fake-call-fields label {
+  display: block;
+  margin-bottom: 3px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #1f4f2d;
+}
+
+.shake-fake-call-fields input[type="text"],
+.shake-fake-call-melody-select {
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  min-height: 34px;
+  padding: 5px 8px;
+  border-radius: 8px;
+  border: 1px solid #86efac;
+  font-size: 14px;
+  color: #14532d;
+  background: #ffffff;
+}
+
 .switch-row-text {
   font-size: 14px;
   color: #2d6a4f;
@@ -970,22 +1048,10 @@ textarea:focus {
   margin-top: 40px;
 }
 
-.call-status {
-  font-size: 16px;
-  font-weight: 500;
-  color: #2d6a4f;
-  margin-bottom: 12px;
-}
-
 .caller-name {
   font-size: 42px;
   font-weight: 700;
   margin-bottom: 8px;
-}
-
-.caller-number {
-  font-size: 18px;
-  color: #2d6a4f;
 }
 
 .action-area {
@@ -1048,13 +1114,6 @@ textarea:focus {
 
 .sos-contact-picker select {
   width: 100%;
-}
-
-.sos-target-label {
-  font-weight: 700;
-  color: #1f4f2d;
-  margin-bottom: 10px;
-  font-size: 15px;
 }
 
 .sos-sender-hint {
@@ -1186,28 +1245,23 @@ textarea:focus {
   margin: 0 0 4px;
 }
 
-.sos-situation-label {
-  display: block;
-  margin-top: 14px;
-  margin-bottom: 6px;
+.sos-situation-line {
+  margin: 14px 0 4px;
+  font-size: 16px;
+  line-height: 1.35;
+  color: #14532d;
+  overflow-wrap: break-word;
+  word-break: normal;
+}
+
+.sos-situation-line-label {
   font-size: 14px;
   font-weight: 600;
   color: #1f4f2d;
 }
 
-.sos-situation-from-profile {
-  margin: 0 0 4px;
-  font-size: 16px;
+.sos-situation-line-value {
   font-weight: 700;
-  color: #14532d;
-  line-height: 1.35;
-}
-
-.sos-situation-hint {
-  font-size: 12px;
-  color: #6b7280;
-  line-height: 1.4;
-  margin: 0 0 10px;
 }
 
 .sos-situation-input {
@@ -1220,7 +1274,6 @@ textarea:focus {
   resize: vertical;
 }
 
-.sos-geo-hint,
 .sos-route-hint {
   font-size: 12px;
   color: #6b7280;

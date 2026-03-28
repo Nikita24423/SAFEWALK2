@@ -4,24 +4,25 @@ import BottomNav from "@/components/BottomNav";
 import Link from "next/link";
 import Image from "next/image";
 import mapImage from "./safwalk.jpg";
+import { useLocale } from "@/components/LocaleProvider";
 
 export default function MapPage() {
+  const { t } = useLocale();
   return (
     <>
       <div className="container">
-
         <div className="top-bar" />
 
-        <h1>Привет, пользователь!</h1>
-        <div className="meta">Это приложение защитит тебя в опасных ситуациях</div>
+        <h1>{t("mapTitle")}</h1>
+        <div className="meta">{t("mapMeta")}</div>
 
         <div className="features">
           <ul className="features-list">
-            <li>Живое сопровождение</li>
-            <li>Ложный звонок с таймером</li>
-            <li>SOS-кнопка</li>
-            <li>Экстренный вызов при тряске</li>
-            <li>Контакты для экстренных случаев</li>
+            <li>{t("mapF1")}</li>
+            <li>{t("mapF2")}</li>
+            <li>{t("mapF3")}</li>
+            <li>{t("mapF4")}</li>
+            <li>{t("mapF5")}</li>
           </ul>
         </div>
 
@@ -29,7 +30,7 @@ export default function MapPage() {
           <Image
             className="map-image"
             src={mapImage}
-            alt="Маршрут SafeWalk"
+            alt={t("mapAlt")}
             fill
             priority
             sizes="(max-width: 420px) 100vw, 420px"
@@ -37,7 +38,7 @@ export default function MapPage() {
         </div>
 
         <Link className="btn btn-primary block-link" href="/profile">
-          НАЧАТЬ
+          {t("mapCta")}
         </Link>
       </div>
 

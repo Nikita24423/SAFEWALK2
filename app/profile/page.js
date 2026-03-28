@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import BottomNav from "@/components/BottomNav";
+import { useLocale } from "@/components/LocaleProvider";
+import { situationMessageKey } from "@/lib/i18n";
 import { requestCloseFakeCall, requestOpenFakeCall } from "@/lib/fakeCallEvents";
 
 const PROFILE_KEY = "safewalk_profile";
@@ -43,17 +45,17 @@ function normalizeMyTelegramHandle(raw) {
  * Ошибка на русском или null, если пусто (поле необязательно при сохранении) или формат ок.
  * Правила как у публичного @username в Telegram: 5–32 символа, a–z, 0–9, _.
  */
-function getMyTelegramUsernameError(raw) {
+function getMyTelegramUsernameError(raw, t) {
   const u = normalizeMyTelegramHandle(raw);
   if (u === "") return null;
   if (u.length < 5) {
-    return "Логин не короче 5 символов (как у @username в Telegram)";
+    return t("errorsTelegramShort");
   }
   if (u.length > 32) {
-    return "Не больше 32 символов";
+    return t("errorsTelegramLong");
   }
   if (!/^[a-zA-Z0-9_]+$/.test(u)) {
-    return "Только латинские буквы, цифры и _; без пробелов и @";
+    return t("errorsTelegramChars");
   }
   return null;
 }
@@ -75,6 +77,7 @@ const initialProfile = {
 };
 
 export default function ProfilePage() {
+  const { t, locale, toggleLocale } = useLocale();
   const [profile, setProfile] = useState(initialProfile);
   const [saved, setSaved] = useState(false);
   const [saveError, setSaveError] = useState("");
@@ -192,16 +195,16 @@ export default function ProfilePage() {
     }
 
     if (!("geolocation" in navigator)) {
-      setGeoStatus("Геолокация не поддерживается");
+      setGeoStatus(t("profileGeoUnsupported"));
       return;
     }
 
-    setGeoStatus("Запрашиваем доступ к геолокации...");
+    setGeoStatus(t("profileGeoRequesting"));
     geoWatchIdRef.current = navigator.geolocation.watchPosition(
       (position) => {
         const next = { lat: position.coords.latitude, lng: position.coords.longitude };
         setGeoCoords(next);
-        setGeoStatus("Геолокация отправляется");
+        setGeoStatus(t("profileGeoSending"));
         try {
           localStorage.setItem("safewalk_last_coords", JSON.stringify({ ...next, ts: Date.now() }));
         } catch (_error) {}
@@ -209,10 +212,10 @@ export default function ProfilePage() {
       (error) => {
         const message =
           error?.code === 1
-            ? "Доступ к геолокации запрещён"
+            ? t("profileGeoDenied")
             : error?.code === 2
-              ? "Не удалось определить местоположение"
-              : "Ошибка геолокации";
+              ? t("profileGeoPosition")
+              : t("profileGeoError");
         setGeoStatus(message);
       },
       { enableHighAccuracy: true, maximumAge: 5000, timeout: 15000 },
@@ -224,7 +227,7 @@ export default function ProfilePage() {
         geoWatchIdRef.current = null;
       }
     };
-  }, [geoSendEnabled]);
+  }, [geoSendEnabled, t]);
 
   useEffect(() => {
     const minutes = Number(profile.timer_minutes || 0);
@@ -348,7 +351,21 @@ export default function ProfilePage() {
 
   function setField(field, value) {
     const nextValue = field === "role" ? normalizeSituation(value) : value;
-    setProfile((prev) => ({ ...prev, [field]: nextValue }));
+    let routeSnapshot = null;
+    setProfile((prev) => {
+      const next = { ...prev, [field]: nextValue };
+      if (field === "route" || field === "route_from" || field === "route_to") {
+        routeSnapshot = next;
+      }
+      return next;
+    });
+    if (routeSnapshot) {
+      persistRouteFieldsToProfileStorage(
+        routeSnapshot.route,
+        routeSnapshot.route_from,
+        routeSnapshot.route_to,
+      );
+    }
     if (field === "my_telegram_username") {
       setMyTelegramFieldError("");
       setSaveError("");
@@ -356,23 +373,23 @@ export default function ProfilePage() {
   }
 
   function validateMyTelegramField(value) {
-    const err = getMyTelegramUsernameError(value);
+    const err = getMyTelegramUsernameError(value, t);
     setMyTelegramFieldError(err || "");
     return err === null;
   }
 
   function saveProfile() {
     if (!profile.name.trim()) {
-      setSaveError("Введите имя");
+      setSaveError(t("profileSaveEnterName"));
       return;
     }
     const minutesNum = Number(profile.timer_minutes || 0);
     if (!Number.isFinite(minutesNum) || minutesNum < 1) {
-      setSaveError("Таймер должен быть не меньше 1 минуты");
+      setSaveError(t("profileSaveTimerMin"));
       return;
     }
 
-    const tgErr = getMyTelegramUsernameError(profile.my_telegram_username);
+    const tgErr = getMyTelegramUsernameError(profile.my_telegram_username, t);
     if (tgErr) {
       setMyTelegramFieldError(tgErr);
       setSaveError(tgErr);
@@ -402,7 +419,7 @@ export default function ProfilePage() {
       setMyTelegramFieldError("");
       setSaved(true);
     } catch (_error) {
-      setSaveError("Не удалось сохранить данные");
+      setSaveError(t("profileSaveFailed"));
     }
   }
 
@@ -435,6 +452,61 @@ export default function ProfilePage() {
     const nextValue = event.target.checked;
     setShakeFakeCallEnabled(nextValue);
     localStorage.setItem(SHAKE_FAKE_CALL_KEY, String(nextValue));
+    if (nextValue) {
+      persistFakeCallFieldsForShake(profile.fake_call_caller, profile.fake_call_melody);
+    }
+  }
+
+  /** Маршрут в форме без нажатия «Сохранить профиль» — чтобы SOS и возврат на профиль видели актуальные поля. */
+  function persistRouteFieldsToProfileStorage(route, routeFrom, routeTo) {
+    try {
+      const raw = localStorage.getItem(PROFILE_KEY);
+      let stored = {};
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+          stored = parsed;
+        }
+      }
+      localStorage.setItem(
+        PROFILE_KEY,
+        JSON.stringify({
+          ...stored,
+          route: route ?? "",
+          route_from: routeFrom ?? "",
+          route_to: routeTo ?? "",
+        }),
+      );
+    } catch (_error) {}
+  }
+
+  /** Чтобы ложный звонок по тряске сразу видел актуальные имя/мелодию (GlobalFakeCall читает PROFILE_KEY). */
+  function persistFakeCallFieldsForShake(caller, melody) {
+    try {
+      const raw = localStorage.getItem(PROFILE_KEY);
+      const stored = raw ? JSON.parse(raw) : {};
+      localStorage.setItem(
+        PROFILE_KEY,
+        JSON.stringify({
+          ...stored,
+          fake_call_caller: String(caller ?? "").trim(),
+          fake_call_melody: melody || "synth",
+        }),
+      );
+    } catch (_error) {}
+  }
+
+  function onShakeFakeCallCallerChange(event) {
+    const v = event.target.value;
+    setField("fake_call_caller", v);
+    persistFakeCallFieldsForShake(v, profile.fake_call_melody);
+  }
+
+  function onShakeFakeCallMelodyChange(event) {
+    const v = event.target.value;
+    setField("fake_call_melody", v);
+    persistFakeCallFieldsForShake(profile.fake_call_caller, v);
+    startMelodyPreview(v);
   }
 
   function onShakeSendSosChange(event) {
@@ -769,22 +841,32 @@ export default function ProfilePage() {
     <>
       <div className="container">
         <div className="top-bar top-bar-profile">
-          <button className="btn-payment" type="button" onClick={openPremiumModal}>
-            💳 Premium
-          </button>
+          <div className="top-bar-profile-actions">
+            <button className="btn-payment" type="button" onClick={openPremiumModal}>
+              {t("premiumBtn")}
+            </button>
+            <button
+              type="button"
+              className={`btn-lang ${locale === "en" ? "btn-lang-active" : ""}`}
+              onClick={toggleLocale}
+              aria-label={locale === "ru" ? "English" : "Русский"}
+            >
+              {locale === "ru" ? "EN" : "RUS"}
+            </button>
+          </div>
         </div>
 
-        <h1>Профиль</h1>
+        <h1>{t("profileTitle")}</h1>
 
         <form className="profile-form" onSubmit={onSubmit} noValidate>
           <div className="profile-name-row">
             <div>
-              <label htmlFor="name">Имя</label>
+              <label htmlFor="name">{t("profileName")}</label>
               <input
                 id="name"
                 name="name"
                 type="text"
-                placeholder="Ваше имя"
+                placeholder={t("profileNamePh")}
                 required
                 autoComplete="name"
                 value={profile.name}
@@ -792,12 +874,12 @@ export default function ProfilePage() {
               />
             </div>
             <div>
-              <label htmlFor="my_telegram_username">Ваш Telegram</label>
+              <label htmlFor="my_telegram_username">{t("profileMyTg")}</label>
               <input
                 id="my_telegram_username"
                 name="my_telegram_username"
                 type="text"
-                placeholder="@username (латиница, 5–32 символа)"
+                placeholder={t("profileMyTgPh")}
                 autoComplete="off"
                 inputMode="text"
                 autoCapitalize="none"
@@ -817,9 +899,8 @@ export default function ProfilePage() {
               ) : null}
             </div>
           </div>
-          <p className="profile-telegram-hint">Для SOS укажите тот же @username, с которого открываете бота — иначе бот не сможет прислать вам ответ в Telegram.</p>
 
-          <label htmlFor="role">Ситуация</label>
+          <label htmlFor="role">{t("profileSituation")}</label>
           <select
             id="role"
             name="role"
@@ -827,55 +908,55 @@ export default function ProfilePage() {
             value={profile.role}
             onChange={(event) => setField("role", event.target.value)}
           >
-            <option value="late_walk">Поздняя прогулка</option>
-            <option value="stranger_date">Свидание с незнакомцем</option>
-            <option value="unknown_place">Незнакомое место</option>
-            <option value="unplanned_meeting">Незапланированная встреча</option>
+            <option value="late_walk">{t(situationMessageKey("late_walk"))}</option>
+            <option value="stranger_date">{t(situationMessageKey("stranger_date"))}</option>
+            <option value="unknown_place">{t(situationMessageKey("unknown_place"))}</option>
+            <option value="unplanned_meeting">{t(situationMessageKey("unplanned_meeting"))}</option>
           </select>
 
           <div className="add-actions">
             <button type="button" className="btn btn-secondary add-btn" onClick={toggleRouteFields}>
-              Маршрут
+              {t("profileBtnRoute")}
             </button>
             <button type="button" className="btn btn-secondary add-btn" onClick={openFalseCallSection}>
-              Ложный вызов
+              {t("profileBtnFakeCall")}
             </button>
             <button type="button" className="btn btn-secondary add-btn" onClick={toggleContactFields}>
-              Контакты
+              {t("profileBtnContacts")}
             </button>
           </div>
 
           {showRouteFields ? (
             <div className="expand-card">
-              <label htmlFor="route">Название маршрута</label>
+              <label htmlFor="route">{t("profileRouteName")}</label>
               <input
                 id="route"
                 name="route"
                 type="text"
-                placeholder="Например: Дом - Работа"
+                placeholder={t("profileRouteNamePh")}
                 autoComplete="off"
                 value={profile.route}
                 onChange={(event) => setField("route", event.target.value)}
               />
 
-              <label htmlFor="route_from">Откуда</label>
+              <label htmlFor="route_from">{t("profileRouteFrom")}</label>
               <input
                 id="route_from"
                 name="route_from"
                 type="text"
-                placeholder="Точка старта"
+                placeholder={t("profileRouteFromPh")}
                 autoComplete="off"
                 ref={routeFromRef}
                 value={profile.route_from}
                 onChange={(event) => setField("route_from", event.target.value)}
               />
 
-              <label htmlFor="route_to">Куда</label>
+              <label htmlFor="route_to">{t("profileRouteTo")}</label>
               <input
                 id="route_to"
                 name="route_to"
                 type="text"
-                placeholder="Точка назначения"
+                placeholder={t("profileRouteToPh")}
                 autoComplete="off"
                 ref={routeToRef}
                 value={profile.route_to}
@@ -884,12 +965,12 @@ export default function ProfilePage() {
 
               <div className="route-actions">
                 <button type="button" className="btn btn-primary route-save-btn" onClick={saveCurrentRoute}>
-                  Сохранить маршрут
+                  {t("profileSaveRoute")}
                 </button>
               </div>
 
               <div className="route-history">
-                <div className="route-history-title">История маршрутов</div>
+                <div className="route-history-title">{t("profileRouteHistory")}</div>
                 <button
                   type="button"
                   className="route-history-trigger"
@@ -901,13 +982,13 @@ export default function ProfilePage() {
                 >
                   {routeHistory.length
                     ? selectedRouteHistoryIndex === ""
-                      ? "Выберите маршрут"
-                      : (routeHistory[Number(selectedRouteHistoryIndex)]?.route || "Без названия") +
+                      ? t("profilePickRoute")
+                      : (routeHistory[Number(selectedRouteHistoryIndex)]?.route || t("profileNoRouteName")) +
                         ": " +
                         (routeHistory[Number(selectedRouteHistoryIndex)]?.route_from || "—") +
                         " → " +
                         (routeHistory[Number(selectedRouteHistoryIndex)]?.route_to || "—")
-                    : "Нет маршрутов"}
+                    : t("profileNoRoutes")}
                 </button>
 
                 {routeHistoryOpen && routeHistory.length ? (
@@ -915,12 +996,12 @@ export default function ProfilePage() {
                     {routeHistory.map((item, index) => (
                       <div className="route-history-row" key={`${item.route}-${item.route_from}-${item.route_to}-${index}`}>
                         <button type="button" className="route-history-option" onClick={() => selectRouteHistoryByIndex(index)}>
-                          {(item.route || "Без названия") + ": " + (item.route_from || "—") + " → " + (item.route_to || "—")}
+                          {(item.route || t("profileNoRouteName")) + ": " + (item.route_from || "—") + " → " + (item.route_to || "—")}
                         </button>
                         <button
                           type="button"
                           className="route-history-delete"
-                          aria-label="Удалить маршрут"
+                          aria-label={t("profileDeleteRouteAria")}
                           onClick={() => removeRouteHistoryByIndex(index)}
                         >
                           -
@@ -933,154 +1014,21 @@ export default function ProfilePage() {
             </div>
           ) : null}
 
-          {showContactFields ? (
-            <div className="expand-card">
-              <div className="contacts-head">
-                <div className="route-history-title">Все контакты</div>
-                <button type="button" className="btn btn-secondary add-btn" onClick={() => setShowContactEditor((prev) => !prev)}>
-                  + Добавить контакт
-                </button>
-              </div>
-
-              {contactsHistory.length ? (
-                <div className="contacts-list">
-                  {contactsHistory.map((item, index) => (
-                    <div className="contact-row" key={`${item.contact_name}-${item.emergency_phone}-${item.telegram_username}-${item.instagram_username}-${index}`}>
-                      <button type="button" className="contact-item" onClick={() => applyContactFromHistory(item)}>
-                        <strong>{item.contact_name || "Без имени"}</strong>
-                        <span>{item.emergency_phone || "Телефон не указан"}</span>
-                        <span>{item.telegram_username || "Telegram не указан"}</span>
-                        <span>{item.instagram_username || "Instagram не указан"}</span>
-                      </button>
-                      <button
-                        type="button"
-                        className="contact-remove-btn"
-                        aria-label="Удалить контакт"
-                        onClick={() => removeContactByIndex(index)}
-                      >
-                        -
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="contacts-empty">Нет контактов</div>
-              )}
-
-              {showContactEditor ? (
-                <>
-                  <div className="contact-channel-grid">
-                    <button
-                      type="button"
-                      className={`contact-channel-btn ${contactChannels.phone ? "is-active" : "is-inactive"}`}
-                      onClick={() => toggleContactChannel("phone")}
-                      aria-label="Телефон"
-                    >
-                      📞
-                    </button>
-                    <button
-                      type="button"
-                      className={`contact-channel-btn ${contactChannels.telegram ? "is-active" : "is-inactive"}`}
-                      onClick={() => toggleContactChannel("telegram")}
-                      aria-label="Telegram"
-                    >
-                      ✈️
-                    </button>
-                    <button
-                      type="button"
-                      className={`contact-channel-btn ${contactChannels.instagram ? "is-active" : "is-inactive"}`}
-                      onClick={() => toggleContactChannel("instagram")}
-                      aria-label="Instagram"
-                    >
-                      📸
-                    </button>
-                  </div>
-
-                  <label htmlFor="contact_name">Имя контакта</label>
-                  <input
-                    id="contact_name"
-                    name="contact_name"
-                    type="text"
-                    placeholder="Введите имя контакта"
-                    autoComplete="name"
-                    value={profile.contact_name}
-                    onChange={(event) => setField("contact_name", event.target.value)}
-                  />
-
-                  {contactChannels.phone ? (
-                    <>
-                      <label htmlFor="emergency_phone">Телефон экстренного вызова</label>
-                      <input
-                        id="emergency_phone"
-                        name="emergency_phone"
-                        type="tel"
-                        placeholder="+375 (__) ___-__-__"
-                        autoComplete="tel"
-                        value={profile.emergency_phone}
-                        onChange={(event) => setField("emergency_phone", event.target.value)}
-                      />
-                    </>
-                  ) : null}
-
-                  {contactChannels.telegram ? (
-                    <>
-                      <label htmlFor="telegram_username">Telegram (@...)</label>
-                      <input
-                        id="telegram_username"
-                        name="telegram_username"
-                        type="text"
-                        placeholder="@username"
-                        autoComplete="off"
-                        value={profile.telegram_username}
-                        onChange={(event) => setField("telegram_username", event.target.value)}
-                      />
-                      <p className="profile-telegram-hint">
-                        Чтобы SOS доходил в Telegram, этот человек должен один раз открыть <strong>вашего</strong> бота и
-                        нажать «Запустить» (/start). Иначе Telegram вернёт ошибку «chat not found».
-                      </p>
-                    </>
-                  ) : null}
-
-                  {contactChannels.instagram ? (
-                    <>
-                      <label htmlFor="instagram_username">Instagram (@...)</label>
-                      <input
-                        id="instagram_username"
-                        name="instagram_username"
-                        type="text"
-                        placeholder="@instagram"
-                        autoComplete="off"
-                        value={profile.instagram_username}
-                        onChange={(event) => setField("instagram_username", event.target.value)}
-                      />
-                    </>
-                  ) : null}
-
-                  <div className="route-actions">
-                    <button type="button" className="btn btn-primary route-save-btn" onClick={saveCurrentContact}>
-                      Сохранить контакт
-                    </button>
-                  </div>
-                </>
-              ) : null}
-            </div>
-          ) : null}
-
           {showTimerFields ? (
             <div className="expand-card" ref={timerSectionRef}>
               <div className="contacts-head">
                 <div className="route-history-title">
-                  {falseCallDeleteMode ? "Все ложные вызовы (режим удаления)" : "Все ложные вызовы"}
+                  {falseCallDeleteMode ? t("profileFalseCallsDeleteMode") : t("profileFalseCallsAll")}
                 </div>
                 <div className="false-call-head-actions">
                   <button type="button" className="btn btn-secondary add-btn" onClick={() => setShowFalseCallEditor((prev) => !prev)}>
-                    Добавить
+                    {t("profileAdd")}
                   </button>
                   <button
                     type="button"
                     className={`btn btn-secondary false-call-delete-btn ${falseCallDeleteMode ? "is-active" : ""}`}
                     onClick={() => setFalseCallDeleteMode((prev) => !prev)}
-                    aria-label={falseCallDeleteMode ? "Завершить удаление" : "Режим удаления"}
+                    aria-label={falseCallDeleteMode ? t("profileDeleteModeDoneAria") : t("profileDeleteModeAria")}
                   >
                     -
                   </button>
@@ -1102,15 +1050,22 @@ export default function ProfilePage() {
                           applyFalseCallFromHistory(item);
                         }}
                       >
-                        <strong>Таймер: {item.timer_minutes} мин</strong>
-                        <span>Кто звонит: {item.fake_call_caller || "Служба безопасности"}</span>
-                        <span>Мелодия: {item.fake_call_melody === "synth" ? "Стандартная" : item.fake_call_melody.split("/").pop()}</span>
+                        <strong>
+                          {t("profileTimerPrefix")} {item.timer_minutes} {t("profileTimerMin")}
+                        </strong>
+                        <span>
+                          {t("profileCallerLabel")} {item.fake_call_caller || t("defaultCallerName")}
+                        </span>
+                        <span>
+                          {t("profileMelodyLabel")}{" "}
+                          {item.fake_call_melody === "synth" ? t("profileMelodyDefault") : item.fake_call_melody.split("/").pop()}
+                        </span>
                       </button>
                       {falseCallDeleteMode ? (
                         <button
                           type="button"
                           className="btn false-call-remove-btn"
-                          aria-label="Удалить ложный вызов"
+                          aria-label={t("profileDeleteFakeCallAria")}
                           onClick={() => removeFalseCallByIndex(index)}
                         >
                           -
@@ -1125,11 +1080,11 @@ export default function ProfilePage() {
                         >
                           {timerRunning && activeFalseCallHistoryIndex === index ? (
                             <>
-                              <span>Стоп</span>
+                              <span>{t("profileStop")}</span>
                               <span className="false-call-run-time">{formatSeconds(timerSecondsLeft)}</span>
                             </>
                           ) : (
-                            "Запуск"
+                            t("profileStart")
                           )}
                         </button>
                       )}
@@ -1137,12 +1092,12 @@ export default function ProfilePage() {
                   ))}
                 </div>
               ) : (
-                <div className="contacts-empty">Нет ложных вызовов</div>
+                <div className="contacts-empty">{t("profileNoFakeCalls")}</div>
               )}
 
               {showFalseCallEditor ? (
                 <>
-                  <label htmlFor="timer_minutes">Ложный вызов (минуты)</label>
+                  <label htmlFor="timer_minutes">{t("profileFakeCallMinutes")}</label>
                   <div className="timer-row">
                     <input
                       id="timer_minutes"
@@ -1161,7 +1116,7 @@ export default function ProfilePage() {
                       name="fake_call_caller"
                       className="timer-caller-input"
                       type="text"
-                      placeholder="Кто звонит?"
+                      placeholder={t("profileWhoCallsPh")}
                       value={profile.fake_call_caller}
                       onChange={(event) => setField("fake_call_caller", event.target.value)}
                     />
@@ -1173,7 +1128,7 @@ export default function ProfilePage() {
                       onChange={onMelodyChange}
                       onClick={onMelodySelectClick}
                     >
-                      <option value="synth">Стандартная</option>
+                      <option value="synth">{t("profileMelodyDefault")}</option>
                       <option value="/honor.mp3">Honor</option>
                       <option value="/Huawei.mp3">Huawei</option>
                       <option value="/iphone.mp3">iPhone</option>
@@ -1182,10 +1137,144 @@ export default function ProfilePage() {
                       <option value="/xiaomi.mp3">Xiaomi</option>
                     </select>
                   </div>
-                  <p className="timer-left">Осталось: {formatSeconds(timerSecondsLeft)}</p>
+                  <p className="timer-left">
+                    {t("profileTimeLeft")} {formatSeconds(timerSecondsLeft)}
+                  </p>
                   <div className="route-actions">
                     <button type="button" className="btn btn-primary route-save-btn" onClick={saveCurrentFalseCall}>
-                      Сохранить ложный вызов
+                      {t("profileSaveFakeCall")}
+                    </button>
+                  </div>
+                </>
+              ) : null}
+            </div>
+          ) : null}
+
+          {showContactFields ? (
+            <div className="expand-card">
+              <div className="contacts-head">
+                <div className="route-history-title">{t("profileAllContacts")}</div>
+                <button type="button" className="btn btn-secondary add-btn" onClick={() => setShowContactEditor((prev) => !prev)}>
+                  {t("profileAddContact")}
+                </button>
+              </div>
+
+              {contactsHistory.length ? (
+                <div className="contacts-list">
+                  {contactsHistory.map((item, index) => (
+                    <div className="contact-row" key={`${item.contact_name}-${item.emergency_phone}-${item.telegram_username}-${item.instagram_username}-${index}`}>
+                      <button type="button" className="contact-item" onClick={() => applyContactFromHistory(item)}>
+                        <strong>{item.contact_name || t("profileNoName")}</strong>
+                        <span>{item.emergency_phone || t("profileNoPhone")}</span>
+                        <span>{item.telegram_username || t("profileNoTg")}</span>
+                        <span>{item.instagram_username || t("profileNoIg")}</span>
+                      </button>
+                      <button
+                        type="button"
+                        className="contact-remove-btn"
+                        aria-label={t("profileDeleteContactAria")}
+                        onClick={() => removeContactByIndex(index)}
+                      >
+                        -
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="contacts-empty">{t("profileNoContacts")}</div>
+              )}
+
+              {showContactEditor ? (
+                <>
+                  <div className="contact-channel-grid">
+                    <button
+                      type="button"
+                      className={`contact-channel-btn ${contactChannels.phone ? "is-active" : "is-inactive"}`}
+                      onClick={() => toggleContactChannel("phone")}
+                      aria-label={t("profilePhoneAria")}
+                    >
+                      📞
+                    </button>
+                    <button
+                      type="button"
+                      className={`contact-channel-btn ${contactChannels.telegram ? "is-active" : "is-inactive"}`}
+                      onClick={() => toggleContactChannel("telegram")}
+                      aria-label="Telegram"
+                    >
+                      ✈️
+                    </button>
+                    <button
+                      type="button"
+                      className={`contact-channel-btn ${contactChannels.instagram ? "is-active" : "is-inactive"}`}
+                      onClick={() => toggleContactChannel("instagram")}
+                      aria-label="Instagram"
+                    >
+                      📸
+                    </button>
+                  </div>
+
+                  <label htmlFor="contact_name">{t("profileContactName")}</label>
+                  <input
+                    id="contact_name"
+                    name="contact_name"
+                    type="text"
+                    placeholder={t("profileContactNamePh")}
+                    autoComplete="name"
+                    value={profile.contact_name}
+                    onChange={(event) => setField("contact_name", event.target.value)}
+                  />
+
+                  {contactChannels.phone ? (
+                    <>
+                      <label htmlFor="emergency_phone">{t("profileEmergencyPhone")}</label>
+                      <input
+                        id="emergency_phone"
+                        name="emergency_phone"
+                        type="tel"
+                        placeholder="+375 (__) ___-__-__"
+                        autoComplete="tel"
+                        value={profile.emergency_phone}
+                        onChange={(event) => setField("emergency_phone", event.target.value)}
+                      />
+                    </>
+                  ) : null}
+
+                  {contactChannels.telegram ? (
+                    <>
+                      <label htmlFor="telegram_username">{t("profileTgLabel")}</label>
+                      <input
+                        id="telegram_username"
+                        name="telegram_username"
+                        type="text"
+                        placeholder="@username"
+                        autoComplete="off"
+                        value={profile.telegram_username}
+                        onChange={(event) => setField("telegram_username", event.target.value)}
+                      />
+                      <p className="profile-telegram-hint">
+                        {t("profileTgHintBefore")} <strong>{t("profileTgHintYour")}</strong> {t("profileTgHintAfter")}
+                      </p>
+                    </>
+                  ) : null}
+
+                  {contactChannels.instagram ? (
+                    <>
+                      <label htmlFor="instagram_username">{t("profileIgLabel")}</label>
+                      <input
+                        id="instagram_username"
+                        name="instagram_username"
+                        type="text"
+                        placeholder="@instagram"
+                        autoComplete="off"
+                        value={profile.instagram_username}
+                        onChange={(event) => setField("instagram_username", event.target.value)}
+                      />
+                    </>
+                  ) : null}
+
+                  <div className="route-actions">
+                    <button type="button" className="btn btn-primary route-save-btn" onClick={saveCurrentContact}>
+                      {t("profileSaveContact")}
                     </button>
                   </div>
                 </>
@@ -1204,7 +1293,7 @@ export default function ProfilePage() {
               />
               <span className="toggle-slider" aria-hidden="true" />
             </label>
-            <span className="switch-row-text">Экстренный вызов при тряске</span>
+            <span className="switch-row-text">{t("profileShakeSos")}</span>
           </div>
 
           <div className="switch-row">
@@ -1218,8 +1307,44 @@ export default function ProfilePage() {
               />
               <span className="toggle-slider" aria-hidden="true" />
             </label>
-            <span className="switch-row-text">Ложный вызов при тряске</span>
+            <span className="switch-row-text">{t("profileShakeFake")}</span>
           </div>
+
+          {shakeFakeCallEnabled ? (
+            <div className="shake-fake-call-fields">
+              <div className="shake-fake-call-row">
+                <label htmlFor="shake_fake_call_caller">{t("profileShakeCallerLabel")}</label>
+                <input
+                  id="shake_fake_call_caller"
+                  name="shake_fake_call_caller"
+                  type="text"
+                  placeholder={t("profileWhoCallsPh")}
+                  autoComplete="off"
+                  value={profile.fake_call_caller}
+                  onChange={onShakeFakeCallCallerChange}
+                />
+              </div>
+              <div className="shake-fake-call-row">
+                <label htmlFor="shake_fake_call_melody">{t("profileShakeMelody")}</label>
+                <select
+                  id="shake_fake_call_melody"
+                  name="shake_fake_call_melody"
+                  className="shake-fake-call-melody-select"
+                  value={profile.fake_call_melody}
+                  onChange={onShakeFakeCallMelodyChange}
+                  onClick={onMelodySelectClick}
+                >
+                  <option value="synth">{t("profileMelodyDefault")}</option>
+                  <option value="/honor.mp3">Honor</option>
+                  <option value="/Huawei.mp3">Huawei</option>
+                  <option value="/iphone.mp3">iPhone</option>
+                  <option value="/samsung.mp3">Samsung</option>
+                  <option value="/vivo.mp3">Vivo</option>
+                  <option value="/xiaomi.mp3">Xiaomi</option>
+                </select>
+              </div>
+            </div>
+          ) : null}
 
           <div className="switch-row">
             <label className="toggle-switch" htmlFor="shake-send-sos-switch">
@@ -1232,7 +1357,7 @@ export default function ProfilePage() {
               />
               <span className="toggle-slider" aria-hidden="true" />
             </label>
-            <span className="switch-row-text">Отправлять сигнал SOS при тряске</span>
+            <span className="switch-row-text">{t("profileShakeSendSos")}</span>
           </div>
 
           <div className="switch-row">
@@ -1246,22 +1371,22 @@ export default function ProfilePage() {
               />
               <span className="toggle-slider" aria-hidden="true" />
             </label>
-            <span className="switch-row-text">Отправлять геолокацию</span>
+            <span className="switch-row-text">{t("profileGeoSend")}</span>
           </div>
           {geoStatus ? <div className="meta">{geoStatus}</div> : null}
           {geoCoords ? (
             <div className="meta">
-              Координаты: {geoCoords.lat.toFixed(5)}, {geoCoords.lng.toFixed(5)}
+              {t("profileCoords")} {geoCoords.lat.toFixed(5)}, {geoCoords.lng.toFixed(5)}
             </div>
           ) : null}
 
           <p className="profile-saved-msg" hidden={!saved}>
-            Сохранено
+            {t("profileSaved")}
           </p>
           {saveError ? <p className="profile-error-msg">{saveError}</p> : null}
 
           <button className="btn btn-primary profile-save-btn" type="button" onClick={saveProfile}>
-            💾 Сохранить
+            {t("profileSaveBtn")}
           </button>
         </form>
       </div>
@@ -1277,20 +1402,20 @@ export default function ProfilePage() {
           onClick={closePremiumModal}
         >
           <div className="premium-modal-card" onClick={(event) => event.stopPropagation()}>
-            <button type="button" className="premium-modal-close" onClick={closePremiumModal} aria-label="Закрыть">
+            <button type="button" className="premium-modal-close" onClick={closePremiumModal} aria-label={t("premiumCloseAria")}>
               ×
             </button>
             <h2 id="premium-modal-title" className="premium-modal-title">
-              Premium
+              {t("premiumTitle")}
             </h2>
-            <p className="premium-modal-text">Больше рингтонов, контактов, функций.</p>
+            <p className="premium-modal-text">{t("premiumText")}</p>
             <p className="premium-modal-price">
               {SUBSCRIPTION_PLANS[0]?.price}
               {SUBSCRIPTION_PLANS[0]?.period}
             </p>
             <div className="premium-modal-actions">
               <button type="button" className="btn btn-primary premium-modal-pay-btn" onClick={openStripeCheckout}>
-                Оплата
+                {t("premiumPay")}
               </button>
             </div>
           </div>

@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import BottomNav from "@/components/BottomNav";
+import { useLocale } from "@/components/LocaleProvider";
+import { situationMessageKey } from "@/lib/i18n";
 
 const CONTACTS_HISTORY_KEY = "safewalk_contacts_history";
 const SOS_TARGETS_KEY = "safewalk_sos_targets";
@@ -9,22 +11,11 @@ const PROFILE_KEY = "safewalk_profile";
 
 const SITUATION_ROLE_VALUES = ["late_walk", "stranger_date", "unknown_place", "unplanned_meeting"];
 
-const SITUATION_LABELS = {
-  late_walk: "Поздняя прогулка",
-  stranger_date: "Свидание с незнакомцем",
-  unknown_place: "Незнакомое место",
-  unplanned_meeting: "Незапланированная встреча",
-};
-
 function normalizeSituationRole(value) {
   if (value && SITUATION_ROLE_VALUES.includes(value)) return value;
   if (value === "peaceful") return "late_walk";
   if (value === "guardian") return "stranger_date";
   return "late_walk";
-}
-
-function situationLabelForRole(role) {
-  return SITUATION_LABELS[role] || SITUATION_LABELS.late_walk;
 }
 
 /** Маршрут и ситуация из профиля (как на странице профиля). */
@@ -91,6 +82,7 @@ function requestGeolocation() {
 }
 
 export default function SosPage() {
+  const { t } = useLocale();
   const [sent, setSent] = useState(false);
   const [contacts, setContacts] = useState([]);
   const [sosTargetMode, setSosTargetMode] = useState("all");
@@ -193,19 +185,19 @@ export default function SosPage() {
   function canSendSos() {
     const snap = loadProfileForSos();
     if (!snap.name) {
-      setSosError("В профиле укажите ваше имя");
+      setSosError(t("sosErrName"));
       return false;
     }
     if (!snap.my_telegram_username) {
-      setSosError("В профиле укажите ваш Telegram (@username) — так бот отправит данные и сможет ответить вам");
+      setSosError(t("sosErrTg"));
       return false;
     }
     if (!contacts.length) {
-      setSosError("Добавьте контакты в профиле");
+      setSosError(t("sosErrNoContacts"));
       return false;
     }
     if (sosTargetMode === "selected" && selectedIndices.size < 1) {
-      setSosError("Выберите хотя бы один контакт");
+      setSosError(t("sosErrPickContact"));
       return false;
     }
     setSosError("");
@@ -232,7 +224,7 @@ export default function SosPage() {
         route_label: snap.route || null,
         route_from: snap.route_from || null,
         route_to: snap.route_to || null,
-        situation: situationLabelForRole(snap.role),
+        situation: t(situationMessageKey(snap.role)),
         latitude: geo?.latitude ?? null,
         longitude: geo?.longitude ?? null,
         share_location: Boolean(geo),
@@ -249,24 +241,24 @@ export default function SosPage() {
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
         const msg = [data.error || data.detail, data.hint].filter(Boolean).join("\n\n");
-        setSendError(msg || `Ошибка сервера (${res.status})`);
+        setSendError(msg || `${t("sosErrServer")} (${res.status})`);
         return;
       }
       setSosResults(data.results || null);
       setSent(true);
     } catch (e) {
-      setSendError(e instanceof Error ? e.message : "Не удалось отправить SOS");
+      setSendError(e instanceof Error ? e.message : t("sosErrSend"));
     } finally {
       setSending(false);
     }
-  }, [contacts, selectedContactsList, sosTargetMode]);
+  }, [contacts, selectedContactsList, sosTargetMode, t]);
 
   const dropdownSummary =
     sosTargetMode !== "selected"
       ? "—"
       : selectedIndices.size === 0
-        ? "Нажмите, чтобы выбрать контакты"
-        : `Выбрано: ${selectedIndices.size}`;
+        ? t("sosPickContactsBtn")
+        : `${t("sosSelectedPrefix")} ${selectedIndices.size}`;
 
   return (
     <>
@@ -274,21 +266,18 @@ export default function SosPage() {
         {!sent ? (
           <div className="sos-initial">
             <div className="sos-contact-picker">
-              <div className="sos-target-label">Кому отправить SOS</div>
               {profileSos.name && profileSos.my_telegram_username ? (
                 <p className="sos-sender-hint">
-                  Отправитель: <strong>{profileSos.name}</strong>
+                  {t("sosSender")} <strong>{profileSos.name}</strong>
                   {" · "}
-                  Telegram: <strong>@{profileSos.my_telegram_username}</strong>
-                  <span className="sos-sender-hint-muted"> (из профиля)</span>
+                  {t("sosTgLine")} <strong>@{profileSos.my_telegram_username}</strong>
+                  <span className="sos-sender-hint-muted"> {t("sosFromProfile")}</span>
                 </p>
               ) : (
-                <p className="sos-inline-error">
-                  В профиле укажите <strong>имя</strong> и <strong>ваш Telegram @username</strong> — с них уйдёт SOS в Telegram.
-                </p>
+                <p className="sos-inline-error">{t("sosProfileNeed")}</p>
               )}
 
-              <div className="sos-target-row" role="radiogroup" aria-label="Режим отправки SOS">
+              <div className="sos-target-row" role="radiogroup" aria-label={t("sosModeAria")}>
                 <label className={`sos-mode-pill ${sosTargetMode === "all" ? "is-active" : ""}`}>
                   <input
                     type="radio"
@@ -301,7 +290,7 @@ export default function SosPage() {
                       setSosError("");
                     }}
                   />
-                  <span>Всем</span>
+                  <span>{t("sosEveryone")}</span>
                 </label>
                 <label className={`sos-mode-pill ${sosTargetMode === "selected" ? "is-active" : ""}`}>
                   <input
@@ -314,15 +303,15 @@ export default function SosPage() {
                       setSosError("");
                     }}
                   />
-                  <span>Выбранным</span>
+                  <span>{t("sosSelectedPill")}</span>
                 </label>
               </div>
 
               {sosTargetMode === "all" ? (
                 <p className="sos-all-hint">
                   {contacts.length
-                    ? `Будут уведомлены все контакты (${contacts.length}).`
-                    : "Сначала добавьте контакты в профиле."}
+                    ? `${t("sosNotifyAll")} (${contacts.length}).`
+                    : t("sosAddContactsFirst")}
                 </p>
               ) : (
                 <div className="sos-dropdown">
@@ -342,7 +331,7 @@ export default function SosPage() {
                     <div className="sos-dropdown-panel" role="listbox" aria-multiselectable="true">
                       {contacts.map((item, index) => {
                         const checked = selectedIndices.has(index);
-                        const label = item.contact_name || "Без имени";
+                        const label = item.contact_name || t("profileNoName");
                         return (
                           <label key={`${label}-${item.emergency_phone}-${index}`} className="sos-dropdown-item">
                             <input type="checkbox" checked={checked} onChange={() => toggleIndex(index)} />
@@ -356,17 +345,15 @@ export default function SosPage() {
               )}
               {sosError ? <p className="sos-inline-error">{sosError}</p> : null}
 
-              <div className="sos-situation-label">Ситуация</div>
-              <p className="sos-situation-from-profile">{situationLabelForRole(profileSos.role)}</p>
-              <p className="sos-situation-hint">Выбор ситуации — в разделе «Профиль»</p>
-              <p className="sos-geo-hint">
-                При отправке запрашивается геолокация (если разрешите — уйдёт вместе с маршрутом).
+              <p className="sos-situation-line">
+                <span className="sos-situation-line-label">{t("sosSituation")}</span>{" "}
+                <span className="sos-situation-line-value">{t(situationMessageKey(profileSos.role))}</span>
               </p>
               <p className="sos-route-hint">
-                Маршрут берётся из профиля:{" "}
+                {t("sosRouteIntro")}{" "}
                 {[profileSos.route_from, profileSos.route_to].filter(Boolean).length
                   ? `${profileSos.route_from || "—"} → ${profileSos.route_to || "—"}`
-                  : "не задан — укажите в профиле"}
+                  : t("sosRouteUnset")}
                 {profileSos.route ? ` («${profileSos.route}»)` : ""}
               </p>
             </div>
@@ -375,43 +362,40 @@ export default function SosPage() {
 
             <button type="button" className="sos-button" onClick={onSosClick} disabled={sending}>
               <span className="sos-text">{sending ? "…" : "SOS"}</span>
-              <span className="sos-subtitle">{sending ? "Отправка…" : "Позвать на помощь"}</span>
+              <span className="sos-subtitle">{sending ? t("sosSending") : t("sosCallHelp")}</span>
             </button>
           </div>
         ) : (
           <div className="sos-sent sos-sent-visible">
             <div className="sos-success-icon">🚨</div>
-            <h1 className="sos-success-title">SOS отправлен!</h1>
-            <p className="sos-success-message">
-              Запрос обработан. Если у контакта не открыт чат с ботом — доставка в Telegram невозможна (нужен /start у
-              вашего бота).
-            </p>
+            <h1 className="sos-success-title">{t("sosSuccessTitle")}</h1>
+            <p className="sos-success-message">{t("sosSuccessBody")}</p>
             {sosTargetMode === "all" && contacts.length ? (
-              <p className="sos-success-contact">Контактов: {contacts.length}</p>
+              <p className="sos-success-contact">
+                {t("sosContactsCount")} {contacts.length}
+              </p>
             ) : selectedContactsList.length ? (
               <p className="sos-success-contact">
-                Контакты: {selectedContactsList.map((c) => c.contact_name || "Без имени").join(", ")}
+                {t("sosContactsLine")}{" "}
+                {selectedContactsList.map((c) => c.contact_name || t("profileNoName")).join(", ")}
               </p>
             ) : null}
             {sosResults && sosResults.length ? (
               <ul className="sos-results-list">
                 {sosResults.map((r, i) => (
                   <li key={i}>
-                    {r.contact || "?"}: {r.ok ? "Telegram ✓" : r.error || "ошибка"}
+                    {r.contact || "?"}: {r.ok ? t("sosTelegramOk") : r.error || t("sosErrorGeneric")}
                   </li>
                 ))}
               </ul>
             ) : null}
             <div className="sos-coordinates">
-              <span className="coord-label">📍 Координаты (если были переданы):</span>
+              <span className="coord-label">📍 {t("sosCoordsIfAny")}</span>
               <span className="coord-value">
                 {lastCoords ? `${lastCoords.latitude.toFixed(6)}, ${lastCoords.longitude.toFixed(6)}` : "—"}
               </span>
             </div>
-            <p className="sos-note">
-              Для Telegram контакт должен хотя бы раз написать боту. Instagram не отправляется ботом автоматически —
-              в тексте уведомления указан @ при наличии.
-            </p>
+            <p className="sos-note">{t("sosNote")}</p>
           </div>
         )}
       </div>

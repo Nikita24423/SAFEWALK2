@@ -5,6 +5,7 @@ import {
   SAFEWALK_FAKE_CALL_CLOSE,
   SAFEWALK_FAKE_CALL_OPEN,
 } from "@/lib/fakeCallEvents";
+import { useLocale } from "@/components/LocaleProvider";
 
 const PROFILE_KEY = "safewalk_profile";
 const SHAKE_FAKE_CALL_KEY = "safewalk_shake_fake_call_enabled";
@@ -24,6 +25,7 @@ function loadProfileFakeCallDefaults() {
 }
 
 export default function GlobalFakeCall() {
+  const { t } = useLocale();
   const [showFakeCall, setShowFakeCall] = useState(false);
   const [fakeCallAnswered, setFakeCallAnswered] = useState(false);
   const [caller, setCaller] = useState("Служба безопасности");
@@ -219,13 +221,13 @@ export default function GlobalFakeCall() {
   if (!showFakeCall) return null;
 
   return (
-    <div className="fake-call-overlay" role="dialog" aria-modal="true" aria-label="Входящий вызов">
+    <div className="fake-call-overlay" role="dialog" aria-modal="true" aria-label={t("fakeCallAria")}>
       <div className="fake-call-screen">
         <div className="fake-call-screen-main">
           {!fakeCallAnswered ? (
-            <p className="fake-call-screen-label">входящий вызов</p>
+            <p className="fake-call-screen-label">{t("fakeCallIncoming")}</p>
           ) : (
-            <p className="fake-call-screen-label fake-call-screen-label-active">разговор</p>
+            <p className="fake-call-screen-label fake-call-screen-label-active">{t("fakeCallActive")}</p>
           )}
           <h1 className="fake-call-screen-name">{caller}</h1>
           {!fakeCallAnswered ? <p className="fake-call-screen-sub">SafeWalk</p> : null}
@@ -238,7 +240,7 @@ export default function GlobalFakeCall() {
                 <button
                   type="button"
                   className="fake-call-ios-circle fake-call-ios-circle-decline"
-                  aria-label="Сбросить"
+                  aria-label={t("fakeCallDeclineAria")}
                   onClick={closeFakeCall}
                 >
                   <svg className="fake-call-ios-icon" viewBox="0 0 24 24" aria-hidden="true">
@@ -249,13 +251,13 @@ export default function GlobalFakeCall() {
                     />
                   </svg>
                 </button>
-                <span className="fake-call-ios-caption">Сбросить</span>
+                <span className="fake-call-ios-caption">{t("fakeCallDecline")}</span>
               </div>
               <div className="fake-call-ios-action">
                 <button
                   type="button"
                   className="fake-call-ios-circle fake-call-ios-circle-accept"
-                  aria-label="Принять"
+                  aria-label={t("fakeCallAcceptAria")}
                   onClick={() => setFakeCallAnswered(true)}
                 >
                   <svg className="fake-call-ios-icon" viewBox="0 0 24 24" aria-hidden="true">
@@ -265,7 +267,7 @@ export default function GlobalFakeCall() {
                     />
                   </svg>
                 </button>
-                <span className="fake-call-ios-caption">Принять</span>
+                <span className="fake-call-ios-caption">{t("fakeCallAccept")}</span>
               </div>
             </div>
           ) : (
@@ -274,7 +276,7 @@ export default function GlobalFakeCall() {
                 <button
                   type="button"
                   className="fake-call-ios-circle fake-call-ios-circle-decline"
-                  aria-label="Завершить вызов"
+                  aria-label={t("fakeCallEndAria")}
                   onClick={closeFakeCall}
                 >
                   <svg className="fake-call-ios-icon" viewBox="0 0 24 24" aria-hidden="true">
@@ -285,7 +287,7 @@ export default function GlobalFakeCall() {
                     />
                   </svg>
                 </button>
-                <span className="fake-call-ios-caption">Завершить</span>
+                <span className="fake-call-ios-caption">{t("fakeCallEnd")}</span>
               </div>
             </div>
           )}

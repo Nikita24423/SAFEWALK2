@@ -1,25 +1,29 @@
+"use client";
+
 import Link from "next/link";
 import BottomNav from "@/components/BottomNav";
+import { useLocale } from "@/components/LocaleProvider";
 
 export default function HomePage() {
+  const { t } = useLocale();
   return (
     <>
       <div className="container">
         <div className="top-bar" />
 
         <h1>SafeWalk</h1>
-        <div className="subtitlle">Защити себя!</div>
+        <div className="subtitlle">{t("homeSubtitle")}</div>
 
         <div className="status">
           <ul>
-            <li>Живое сопровождение</li>
-            <li>Фейковый звонок</li>
-            <li>SOS-кнопка</li>
+            <li>{t("homeFeature1")}</li>
+            <li>{t("homeFeature2")}</li>
+            <li>{t("homeFeature3")}</li>
           </ul>
         </div>
 
         <Link className="btn btn-primary block-link" href="/map">
-          Начать использование
+          {t("homeCta")}
         </Link>
       </div>
 

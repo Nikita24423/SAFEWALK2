@@ -1,9 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import BottomNav from "@/components/BottomNav";
+import { useLocale } from "@/components/LocaleProvider";
 
 export default function CallPage() {
+  const { t } = useLocale();
   const [callStarted, setCallStarted] = useState(false);
   const audioRef = useRef({ ctx: null, osc: null, gain: null });
 
@@ -61,9 +63,7 @@ export default function CallPage() {
         <div className="top-bar top-bar-call" />
 
         <div className="caller-info">
-          <div className="call-status">{callStarted ? "Вызов..." : "Готов к набору"}</div>
-          <div className="caller-name">Служба безопасности</div>
-          <div className="caller-number">SafeWalk Help</div>
+          <div className="caller-name">{t("callSecurityService")}</div>
         </div>
 
         <div className="action-area">
@@ -71,7 +71,7 @@ export default function CallPage() {
             type="button"
             className={`call-button ${callStarted ? "call-button-danger" : ""}`}
             onClick={() => setCallStarted((prev) => !prev)}
-            aria-label={callStarted ? "Завершить звонок" : "Начать звонок"}
+            aria-label={callStarted ? t("callAriaEnd") : t("callAriaStart")}
           >
             <svg className={`phone-icon ${callStarted ? "rotated" : ""}`} viewBox="0 0 24 24" fill="currentColor">
               <path d="M6.62 10.79c1.44 2.83 3.76 5.14 6.59 6.59l2.2-2.2c.28-.28.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1-9.39 0-17-7.61-17-17 0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.2 2.2z" />
