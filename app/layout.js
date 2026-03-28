@@ -1,5 +1,6 @@
 import "./globals.css";
 import Script from "next/script";
+import GlobalFakeCall from "@/components/GlobalFakeCall";
 
 export const metadata = {
   title: "SafeWalk",
@@ -16,6 +17,7 @@ export default function RootLayout({ children }) {
     <html lang="ru">
       <body>
         <Script src="https://telegram.org/js/telegram-web-app.js" strategy="afterInteractive" />
+        <GlobalFakeCall />
         {children}
       </body>
     </html>

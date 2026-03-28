@@ -32,17 +32,33 @@ function loadProfileForSos() {
   try {
     const raw = localStorage.getItem(PROFILE_KEY);
     if (!raw) {
-      return { route: "", route_from: "", route_to: "", role: "late_walk" };
+      return {
+        name: "",
+        my_telegram_username: "",
+        route: "",
+        route_from: "",
+        route_to: "",
+        role: "late_walk",
+      };
     }
     const p = JSON.parse(raw);
     return {
+      name: (p.name || "").trim(),
+      my_telegram_username: (p.my_telegram_username || "").trim().replace(/^@+/, ""),
       route: p.route || "",
       route_from: p.route_from || "",
       route_to: p.route_to || "",
       role: normalizeSituationRole(p.role),
     };
   } catch {
-    return { route: "", route_from: "", route_to: "", role: "late_walk" };
+    return {
+      name: "",
+      my_telegram_username: "",
+      route: "",
+      route_from: "",
+      route_to: "",
+      role: "late_walk",
+    };
   }
 }
 
@@ -175,6 +191,15 @@ export default function SosPage() {
   }
 
   function canSendSos() {
+    const snap = loadProfileForSos();
+    if (!snap.name) {
+      setSosError("В профиле укажите ваше имя");
+      return false;
+    }
+    if (!snap.my_telegram_username) {
+      setSosError("В профиле укажите ваш Telegram (@username) — так бот отправит данные и сможет ответить вам");
+      return false;
+    }
     if (!contacts.length) {
       setSosError("Добавьте контакты в профиле");
       return false;
@@ -212,6 +237,8 @@ export default function SosPage() {
         longitude: geo?.longitude ?? null,
         share_location: Boolean(geo),
         requester_telegram_id: getTelegramUserId() ?? null,
+        requester_name: snap.name || null,
+        requester_telegram_username: snap.my_telegram_username || null,
       };
 
       const res = await fetch("/api/sos", {
@@ -248,6 +275,18 @@ export default function SosPage() {
           <div className="sos-initial">
             <div className="sos-contact-picker">
               <div className="sos-target-label">Кому отправить SOS</div>
+              {profileSos.name && profileSos.my_telegram_username ? (
+                <p className="sos-sender-hint">
+                  Отправитель: <strong>{profileSos.name}</strong>
+                  {" · "}
+                  Telegram: <strong>@{profileSos.my_telegram_username}</strong>
+                  <span className="sos-sender-hint-muted"> (из профиля)</span>
+                </p>
+              ) : (
+                <p className="sos-inline-error">
+                  В профиле укажите <strong>имя</strong> и <strong>ваш Telegram @username</strong> — с них уйдёт SOS в Telegram.
+                </p>
+              )}
 
               <div className="sos-target-row" role="radiogroup" aria-label="Режим отправки SOS">
                 <label className={`sos-mode-pill ${sosTargetMode === "all" ? "is-active" : ""}`}>
@@ -343,7 +382,10 @@ export default function SosPage() {
           <div className="sos-sent sos-sent-visible">
             <div className="sos-success-icon">🚨</div>
             <h1 className="sos-success-title">SOS отправлен!</h1>
-            <p className="sos-success-message">Запрос передан в Telegram (где указан @username в контакте)</p>
+            <p className="sos-success-message">
+              Запрос обработан. Если у контакта не открыт чат с ботом — доставка в Telegram невозможна (нужен /start у
+              вашего бота).
+            </p>
             {sosTargetMode === "all" && contacts.length ? (
               <p className="sos-success-contact">Контактов: {contacts.length}</p>
             ) : selectedContactsList.length ? (

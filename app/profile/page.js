@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import BottomNav from "@/components/BottomNav";
+import { requestCloseFakeCall, requestOpenFakeCall } from "@/lib/fakeCallEvents";
 
 const PROFILE_KEY = "safewalk_profile";
 const ROUTE_HISTORY_KEY = "safewalk_route_history";
@@ -9,6 +10,8 @@ const CONTACTS_HISTORY_KEY = "safewalk_contacts_history";
 const SOS_TARGETS_KEY = "safewalk_sos_targets";
 const FALSE_CALL_HISTORY_KEY = "safewalk_false_call_history";
 const SHAKE_SOS_KEY = "safewalk_shake_sos_enabled";
+const SHAKE_FAKE_CALL_KEY = "safewalk_shake_fake_call_enabled";
+const SHAKE_SEND_SOS_KEY = "safewalk_shake_send_sos_enabled";
 const GEO_SEND_KEY = "safewalk_geo_send_enabled";
 const GOOGLE_MAPS_SCRIPT_ID = "google-maps-places-script";
 
@@ -31,8 +34,33 @@ function normalizeSituation(value) {
   return "late_walk";
 }
 
+/** Без @, trim. */
+function normalizeMyTelegramHandle(raw) {
+  return String(raw ?? "").trim().replace(/^@+/, "");
+}
+
+/**
+ * Ошибка на русском или null, если пусто (поле необязательно при сохранении) или формат ок.
+ * Правила как у публичного @username в Telegram: 5–32 символа, a–z, 0–9, _.
+ */
+function getMyTelegramUsernameError(raw) {
+  const u = normalizeMyTelegramHandle(raw);
+  if (u === "") return null;
+  if (u.length < 5) {
+    return "Логин не короче 5 символов (как у @username в Telegram)";
+  }
+  if (u.length > 32) {
+    return "Не больше 32 символов";
+  }
+  if (!/^[a-zA-Z0-9_]+$/.test(u)) {
+    return "Только латинские буквы, цифры и _; без пробелов и @";
+  }
+  return null;
+}
+
 const initialProfile = {
   name: "",
+  my_telegram_username: "",
   role: "late_walk",
   route: "",
   route_from: "",
@@ -50,7 +78,10 @@ export default function ProfilePage() {
   const [profile, setProfile] = useState(initialProfile);
   const [saved, setSaved] = useState(false);
   const [saveError, setSaveError] = useState("");
+  const [myTelegramFieldError, setMyTelegramFieldError] = useState("");
   const [shakeSosEnabled, setShakeSosEnabled] = useState(false);
+  const [shakeFakeCallEnabled, setShakeFakeCallEnabled] = useState(false);
+  const [shakeSendSosEnabled, setShakeSendSosEnabled] = useState(false);
   const [geoSendEnabled, setGeoSendEnabled] = useState(false);
   const [geoStatus, setGeoStatus] = useState("");
   const [geoCoords, setGeoCoords] = useState(null);
@@ -74,16 +105,12 @@ export default function ProfilePage() {
   const [timerRunning, setTimerRunning] = useState(false);
   const [timerSecondsLeft, setTimerSecondsLeft] = useState(300);
   const [activeFalseCallHistoryIndex, setActiveFalseCallHistoryIndex] = useState(null);
-  const [showFakeCall, setShowFakeCall] = useState(false);
-  const [fakeCallAnswered, setFakeCallAnswered] = useState(false);
   const [previewingMelody, setPreviewingMelody] = useState(false);
   const routeFromRef = useRef(null);
   const routeToRef = useRef(null);
   const timerSectionRef = useRef(null);
   const geoWatchIdRef = useRef(null);
-  const fakeCallAudioRef = useRef({ ctx: null, osc: null, gain: null });
-  const fakeCallFileAudioRef = useRef(null);
-  const fakeCallAutoCloseTimeoutRef = useRef(null);
+  const profileRef = useRef(profile);
   const previewFileAudioRef = useRef(null);
   const previewSynthRef = useRef({ ctx: null, osc: null, gain: null });
 
@@ -102,6 +129,7 @@ export default function ProfilePage() {
 
     setProfile({
       name: parsedProfile?.name ?? "",
+      my_telegram_username: parsedProfile?.my_telegram_username ?? "",
       role: normalizeSituation(parsedProfile?.role),
       route: parsedProfile?.route ?? "",
       route_from: parsedProfile?.route_from ?? "",
@@ -144,8 +172,14 @@ export default function ProfilePage() {
     setShowRouteFields(Boolean(parsedProfile?.route));
     setShowContactFields(Boolean(parsedProfile?.emergency_phone || parsedProfile?.telegram_username));
     setShakeSosEnabled(localStorage.getItem(SHAKE_SOS_KEY) === "true");
+    setShakeFakeCallEnabled(localStorage.getItem(SHAKE_FAKE_CALL_KEY) === "true");
+    setShakeSendSosEnabled(localStorage.getItem(SHAKE_SEND_SOS_KEY) === "true");
     setGeoSendEnabled(localStorage.getItem(GEO_SEND_KEY) === "true");
   }, []);
+
+  useEffect(() => {
+    profileRef.current = profile;
+  }, [profile]);
 
   useEffect(() => {
     if (!geoSendEnabled) {
@@ -217,8 +251,11 @@ export default function ProfilePage() {
         if (prev <= 1) {
           setTimerRunning(false);
           setActiveFalseCallHistoryIndex(null);
-          setShowFakeCall(true);
-          setFakeCallAnswered(false);
+          const p = profileRef.current;
+          requestOpenFakeCall({
+            caller: p.fake_call_caller?.trim() || "Служба безопасности",
+            melody: p.fake_call_melody || "synth",
+          });
           return 0;
         }
         return prev - 1;
@@ -227,91 +264,6 @@ export default function ProfilePage() {
 
     return () => clearInterval(intervalId);
   }, [timerRunning]);
-
-  useEffect(() => {
-    if (!showFakeCall || fakeCallAnswered) {
-      if (fakeCallAutoCloseTimeoutRef.current) {
-        clearTimeout(fakeCallAutoCloseTimeoutRef.current);
-        fakeCallAutoCloseTimeoutRef.current = null;
-      }
-      if (fakeCallFileAudioRef.current) {
-        fakeCallFileAudioRef.current.pause();
-        fakeCallFileAudioRef.current.currentTime = 0;
-      }
-      if (fakeCallAudioRef.current.osc) {
-        fakeCallAudioRef.current.osc.stop();
-        fakeCallAudioRef.current.osc.disconnect();
-        fakeCallAudioRef.current.osc = null;
-      }
-      if (fakeCallAudioRef.current.gain) {
-        fakeCallAudioRef.current.gain.disconnect();
-        fakeCallAudioRef.current.gain = null;
-      }
-      return;
-    }
-
-    fakeCallAutoCloseTimeoutRef.current = setTimeout(() => {
-      setShowFakeCall(false);
-      setFakeCallAnswered(false);
-    }, 90 * 1000);
-
-    if (profile.fake_call_melody && profile.fake_call_melody !== "synth") {
-      if (!fakeCallFileAudioRef.current) {
-        fakeCallFileAudioRef.current = new Audio(profile.fake_call_melody);
-        fakeCallFileAudioRef.current.loop = true;
-      } else {
-        fakeCallFileAudioRef.current.src = profile.fake_call_melody;
-      }
-      void fakeCallFileAudioRef.current.play().catch(() => {});
-      return () => {
-        if (fakeCallAutoCloseTimeoutRef.current) {
-          clearTimeout(fakeCallAutoCloseTimeoutRef.current);
-          fakeCallAutoCloseTimeoutRef.current = null;
-        }
-        if (fakeCallFileAudioRef.current) {
-          fakeCallFileAudioRef.current.pause();
-          fakeCallFileAudioRef.current.currentTime = 0;
-        }
-      };
-    }
-
-    const AudioCtx = window.AudioContext || window.webkitAudioContext;
-    if (!AudioCtx) {
-      return;
-    }
-
-    if (!fakeCallAudioRef.current.ctx) {
-      fakeCallAudioRef.current.ctx = new AudioCtx();
-    }
-
-    const ctx = fakeCallAudioRef.current.ctx;
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.type = "triangle";
-    osc.frequency.value = 470;
-    gain.gain.value = 0.03;
-    osc.connect(gain);
-    gain.connect(ctx.destination);
-    osc.start();
-    fakeCallAudioRef.current.osc = osc;
-    fakeCallAudioRef.current.gain = gain;
-
-    return () => {
-      if (fakeCallAutoCloseTimeoutRef.current) {
-        clearTimeout(fakeCallAutoCloseTimeoutRef.current);
-        fakeCallAutoCloseTimeoutRef.current = null;
-      }
-      if (fakeCallAudioRef.current.osc) {
-        fakeCallAudioRef.current.osc.stop();
-        fakeCallAudioRef.current.osc.disconnect();
-        fakeCallAudioRef.current.osc = null;
-      }
-      if (fakeCallAudioRef.current.gain) {
-        fakeCallAudioRef.current.gain.disconnect();
-        fakeCallAudioRef.current.gain = null;
-      }
-    };
-  }, [showFakeCall, fakeCallAnswered, profile.fake_call_melody]);
 
   useEffect(() => {
     return () => {
@@ -397,6 +349,16 @@ export default function ProfilePage() {
   function setField(field, value) {
     const nextValue = field === "role" ? normalizeSituation(value) : value;
     setProfile((prev) => ({ ...prev, [field]: nextValue }));
+    if (field === "my_telegram_username") {
+      setMyTelegramFieldError("");
+      setSaveError("");
+    }
+  }
+
+  function validateMyTelegramField(value) {
+    const err = getMyTelegramUsernameError(value);
+    setMyTelegramFieldError(err || "");
+    return err === null;
   }
 
   function saveProfile() {
@@ -410,9 +372,17 @@ export default function ProfilePage() {
       return;
     }
 
+    const tgErr = getMyTelegramUsernameError(profile.my_telegram_username);
+    if (tgErr) {
+      setMyTelegramFieldError(tgErr);
+      setSaveError(tgErr);
+      return;
+    }
+
     const data = {
       ...profile,
       name: profile.name.trim(),
+      my_telegram_username: normalizeMyTelegramHandle(profile.my_telegram_username),
       role: normalizeSituation(profile.role),
       route: profile.route.trim(),
       route_from: profile.route_from.trim(),
@@ -429,6 +399,7 @@ export default function ProfilePage() {
       localStorage.setItem(PROFILE_KEY, JSON.stringify(data));
       setProfile(data);
       setSaveError("");
+      setMyTelegramFieldError("");
       setSaved(true);
     } catch (_error) {
       setSaveError("Не удалось сохранить данные");
@@ -460,6 +431,18 @@ export default function ProfilePage() {
     localStorage.setItem(SHAKE_SOS_KEY, String(nextValue));
   }
 
+  function onShakeFakeCallChange(event) {
+    const nextValue = event.target.checked;
+    setShakeFakeCallEnabled(nextValue);
+    localStorage.setItem(SHAKE_FAKE_CALL_KEY, String(nextValue));
+  }
+
+  function onShakeSendSosChange(event) {
+    const nextValue = event.target.checked;
+    setShakeSendSosEnabled(nextValue);
+    localStorage.setItem(SHAKE_SEND_SOS_KEY, String(nextValue));
+  }
+
   function onGeoSendChange(event) {
     const nextValue = event.target.checked;
     setGeoSendEnabled(nextValue);
@@ -473,11 +456,6 @@ export default function ProfilePage() {
     return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
   }
 
-  function closeFakeCall() {
-    setShowFakeCall(false);
-    setFakeCallAnswered(false);
-  }
-
   function startOrStopFalseCallFromHistory(entry, index) {
     const minutes = Number(entry?.timer_minutes || 0);
     const initialSeconds = Number.isFinite(minutes) && minutes > 0 ? minutes * 60 : 0;
@@ -485,8 +463,7 @@ export default function ProfilePage() {
     if (timerRunning && activeFalseCallHistoryIndex === index) {
       setTimerRunning(false);
       setActiveFalseCallHistoryIndex(null);
-      setShowFakeCall(false);
-      setFakeCallAnswered(false);
+      requestCloseFakeCall();
       setTimerSecondsLeft(initialSeconds);
       return;
     }
@@ -494,8 +471,7 @@ export default function ProfilePage() {
     setField("timer_minutes", String(entry?.timer_minutes || "5"));
     setField("fake_call_melody", entry?.fake_call_melody || "synth");
     setField("fake_call_caller", entry?.fake_call_caller || "Служба безопасности");
-    setShowFakeCall(false);
-    setFakeCallAnswered(false);
+    requestCloseFakeCall();
     setTimerSecondsLeft(initialSeconds);
     setActiveFalseCallHistoryIndex(index);
     setTimerRunning(initialSeconds > 0);
@@ -618,8 +594,7 @@ export default function ProfilePage() {
     if (timerRunning && activeFalseCallHistoryIndex === idx) {
       setTimerRunning(false);
       setActiveFalseCallHistoryIndex(null);
-      setShowFakeCall(false);
-      setFakeCallAnswered(false);
+      requestCloseFakeCall();
       setTimerSecondsLeft(0);
     } else if (timerRunning && activeFalseCallHistoryIndex > idx) {
       setActiveFalseCallHistoryIndex((prev) => (prev == null ? prev : prev - 1));
@@ -802,17 +777,47 @@ export default function ProfilePage() {
         <h1>Профиль</h1>
 
         <form className="profile-form" onSubmit={onSubmit} noValidate>
-          <label htmlFor="name">Имя</label>
-          <input
-            id="name"
-            name="name"
-            type="text"
-            placeholder="Введите имя"
-            required
-            autoComplete="name"
-            value={profile.name}
-            onChange={(event) => setField("name", event.target.value)}
-          />
+          <div className="profile-name-row">
+            <div>
+              <label htmlFor="name">Имя</label>
+              <input
+                id="name"
+                name="name"
+                type="text"
+                placeholder="Ваше имя"
+                required
+                autoComplete="name"
+                value={profile.name}
+                onChange={(event) => setField("name", event.target.value)}
+              />
+            </div>
+            <div>
+              <label htmlFor="my_telegram_username">Ваш Telegram</label>
+              <input
+                id="my_telegram_username"
+                name="my_telegram_username"
+                type="text"
+                placeholder="@username (латиница, 5–32 символа)"
+                autoComplete="off"
+                inputMode="text"
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
+                aria-invalid={Boolean(myTelegramFieldError)}
+                aria-describedby={myTelegramFieldError ? "my_telegram_username-error" : undefined}
+                className={myTelegramFieldError ? "profile-input-invalid" : undefined}
+                value={profile.my_telegram_username}
+                onChange={(event) => setField("my_telegram_username", event.target.value)}
+                onBlur={(event) => validateMyTelegramField(event.target.value)}
+              />
+              {myTelegramFieldError ? (
+                <p id="my_telegram_username-error" className="profile-field-inline-error" role="alert">
+                  {myTelegramFieldError}
+                </p>
+              ) : null}
+            </div>
+          </div>
+          <p className="profile-telegram-hint">Для SOS укажите тот же @username, с которого открываете бота — иначе бот не сможет прислать вам ответ в Telegram.</p>
 
           <label htmlFor="role">Ситуация</label>
           <select
@@ -1029,6 +1034,10 @@ export default function ProfilePage() {
                         value={profile.telegram_username}
                         onChange={(event) => setField("telegram_username", event.target.value)}
                       />
+                      <p className="profile-telegram-hint">
+                        Чтобы SOS доходил в Telegram, этот человек должен один раз открыть <strong>вашего</strong> бота и
+                        нажать «Запустить» (/start). Иначе Telegram вернёт ошибку «chat not found».
+                      </p>
                     </>
                   ) : null}
 
@@ -1199,6 +1208,34 @@ export default function ProfilePage() {
           </div>
 
           <div className="switch-row">
+            <label className="toggle-switch" htmlFor="shake-fake-call-switch">
+              <input
+                id="shake-fake-call-switch"
+                name="shake-fake-call-switch"
+                type="checkbox"
+                checked={shakeFakeCallEnabled}
+                onChange={onShakeFakeCallChange}
+              />
+              <span className="toggle-slider" aria-hidden="true" />
+            </label>
+            <span className="switch-row-text">Ложный вызов при тряске</span>
+          </div>
+
+          <div className="switch-row">
+            <label className="toggle-switch" htmlFor="shake-send-sos-switch">
+              <input
+                id="shake-send-sos-switch"
+                name="shake-send-sos-switch"
+                type="checkbox"
+                checked={shakeSendSosEnabled}
+                onChange={onShakeSendSosChange}
+              />
+              <span className="toggle-slider" aria-hidden="true" />
+            </label>
+            <span className="switch-row-text">Отправлять сигнал SOS при тряске</span>
+          </div>
+
+          <div className="switch-row">
             <label className="toggle-switch" htmlFor="geo-send-switch">
               <input
                 id="geo-send-switch"
@@ -1254,27 +1291,6 @@ export default function ProfilePage() {
             <div className="premium-modal-actions">
               <button type="button" className="btn btn-primary premium-modal-pay-btn" onClick={openStripeCheckout}>
                 Оплата
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
-
-      {showFakeCall ? (
-        <div className="fake-call-overlay">
-          <div className="fake-call-card">
-            <div className="fake-call-status">{fakeCallAnswered ? "Разговор..." : "Входящий вызов"}</div>
-            <div className="fake-call-name">{profile.fake_call_caller?.trim() || "Служба безопасности"}</div>
-            <div className="fake-call-number">SafeWalk Help</div>
-
-            <div className="fake-call-actions">
-              {!fakeCallAnswered ? (
-                <button type="button" className="fake-call-btn fake-call-btn-accept" onClick={() => setFakeCallAnswered(true)}>
-                  Принять
-                </button>
-              ) : null}
-              <button type="button" className="fake-call-btn fake-call-btn-decline" onClick={closeFakeCall}>
-                {fakeCallAnswered ? "Завершить" : "Сбросить"}
               </button>
             </div>
           </div>

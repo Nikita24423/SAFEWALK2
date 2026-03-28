@@ -221,6 +221,43 @@ textarea:focus {
   color: #b91c1c;
 }
 
+.profile-name-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px 16px;
+  align-items: start;
+}
+
+@media (max-width: 560px) {
+  .profile-name-row {
+    grid-template-columns: 1fr;
+  }
+}
+
+.profile-name-row > div {
+  min-width: 0;
+}
+
+.profile-telegram-hint {
+  margin: -4px 0 14px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: #6b7280;
+}
+
+.profile-input-invalid {
+  border-color: #dc2626 !important;
+  box-shadow: 0 0 0 1px rgba(220, 38, 38, 0.25);
+}
+
+.profile-field-inline-error {
+  margin: 6px 0 0;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.35;
+  color: #b91c1c;
+}
+
 .add-actions {
   display: flex;
   gap: 10px;
@@ -492,13 +529,18 @@ textarea:focus {
 }
 
 .contact-channel-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 8px;
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 2px;
+  width: fit-content;
+  max-width: 100%;
   margin-bottom: 10px;
 }
 
 .contact-channel-btn {
+  flex: 0 0 auto;
   width: 44px;
   height: 44px;
   border-radius: 12px;
@@ -506,7 +548,6 @@ textarea:focus {
   font-size: 18px;
   cursor: pointer;
   transition: transform 0.15s ease, filter 0.15s ease;
-  justify-self: start;
 }
 
 .contact-channel-btn:hover {
@@ -594,68 +635,135 @@ textarea:focus {
   width: 100%;
 }
 
+/* Полноэкранный «входящий вызов» в стиле системного UI */
 .fake-call-overlay {
   position: fixed;
   inset: 0;
   z-index: 1200;
-  background: rgba(0, 0, 0, 0.75);
+  background: #000000;
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  margin: 0;
+}
+
+.fake-call-screen {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 100dvh;
+  min-height: 100vh;
+  color: #ffffff;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+.fake-call-screen-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 48px 28px 24px;
+}
+
+.fake-call-screen-label {
+  margin: 0 0 12px;
+  font-size: 15px;
+  font-weight: 400;
+  letter-spacing: 0.02em;
+  color: rgba(255, 255, 255, 0.55);
+  text-transform: lowercase;
+}
+
+.fake-call-screen-label-active {
+  color: #34c759;
+}
+
+.fake-call-screen-name {
+  margin: 0;
+  font-size: clamp(28px, 8vw, 36px);
+  font-weight: 300;
+  letter-spacing: 0.01em;
+  line-height: 1.2;
+  color: #ffffff;
+  max-width: 90vw;
+  word-break: break-word;
+}
+
+.fake-call-screen-sub {
+  margin: 10px 0 0;
+  font-size: 17px;
+  font-weight: 400;
+  color: rgba(255, 255, 255, 0.45);
+}
+
+.fake-call-screen-footer {
+  flex-shrink: 0;
+  padding: 24px 32px calc(28px + env(safe-area-inset-bottom, 0px));
+}
+
+.fake-call-ios-row {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  justify-content: space-between;
+  max-width: 320px;
+  margin: 0 auto;
+  gap: 16px;
+}
+
+.fake-call-ios-row-single {
+  justify-content: center;
+}
+
+.fake-call-ios-action {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  min-width: 100px;
+}
+
+.fake-call-ios-circle {
+  width: 76px;
+  height: 76px;
+  border-radius: 50%;
+  border: none;
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 20px;
-}
-
-.fake-call-card {
-  width: min(420px, 100%);
-  background: linear-gradient(145deg, #e8f5e9 0%, #c8e6d9 100%);
-  border-radius: 24px;
-  padding: 28px 20px;
-  text-align: center;
-  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.35);
-}
-
-.fake-call-status {
-  font-size: 14px;
-  color: #2d6a4f;
-  margin-bottom: 10px;
-  font-weight: 600;
-}
-
-.fake-call-name {
-  font-size: 34px;
-  font-weight: 800;
-  color: #1f4f2d;
-  margin-bottom: 8px;
-}
-
-.fake-call-number {
-  font-size: 16px;
-  color: #2d6a4f;
-  margin-bottom: 22px;
-}
-
-.fake-call-actions {
-  display: flex;
-  gap: 10px;
-  justify-content: center;
-}
-
-.fake-call-btn {
-  min-width: 120px;
-  border: 0;
-  border-radius: 12px;
-  padding: 10px 12px;
-  color: #ffffff;
-  font-weight: 700;
   cursor: pointer;
+  color: #ffffff;
+  padding: 0;
+  transition: transform 0.12s ease, filter 0.12s ease;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.35);
 }
 
-.fake-call-btn-accept {
-  background: #16a34a;
+.fake-call-ios-circle:active {
+  transform: scale(0.94);
+  filter: brightness(0.92);
 }
 
-.fake-call-btn-decline {
-  background: #dc2626;
+.fake-call-ios-circle-decline {
+  background: #ff3b30;
+}
+
+.fake-call-ios-circle-accept {
+  background: #34c759;
+}
+
+.fake-call-ios-icon {
+  width: 34px;
+  height: 34px;
+  display: block;
+}
+
+.fake-call-ios-caption {
+  font-size: 13px;
+  font-weight: 400;
+  color: rgba(255, 255, 255, 0.9);
+  letter-spacing: 0.01em;
 }
 
 .switch-row {
@@ -663,6 +771,10 @@ textarea:focus {
   align-items: center;
   gap: 12px;
   margin-top: 16px;
+}
+
+.switch-row + .switch-row {
+  margin-top: 6px;
 }
 
 .switch-row-text {
@@ -679,13 +791,24 @@ textarea:focus {
 }
 
 .timer-input {
-  width: 100px;
-  max-width: 100px;
+  width: 56px;
+  max-width: 56px;
+  min-width: 56px;
+  height: 36px;
+  padding: 4px 6px;
+  font-size: 15px;
+  text-align: center;
+  box-sizing: border-box;
 }
 
 .timer-caller-input {
-  min-width: 160px;
-  flex: 1;
+  min-width: 100px;
+  max-width: 140px;
+  flex: 1 1 120px;
+  height: 36px;
+  padding: 4px 8px;
+  font-size: 14px;
+  box-sizing: border-box;
 }
 
 .timer-melody-select {
@@ -934,30 +1057,44 @@ textarea:focus {
   font-size: 15px;
 }
 
+.sos-sender-hint {
+  font-size: 13px;
+  color: #2d6a4f;
+  line-height: 1.45;
+  margin: 0 0 12px;
+}
+
+.sos-sender-hint-muted {
+  font-weight: 500;
+  color: #6b7280;
+}
+
 .sos-target-row {
   display: flex;
   flex-direction: row;
-  flex-wrap: nowrap;
-  gap: 10px;
+  flex-wrap: wrap;
+  gap: 8px;
   margin-bottom: 12px;
   align-items: stretch;
+  justify-content: flex-start;
 }
 
 .sos-mode-pill {
-  flex: 1;
-  display: flex;
+  flex: 0 0 auto;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  padding: 10px 12px;
-  border-radius: 12px;
+  gap: 6px;
+  padding: 8px 14px;
+  border-radius: 999px;
   border: 1px solid rgba(34, 197, 94, 0.35);
   background: rgba(255, 255, 255, 0.75);
   cursor: pointer;
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 700;
   color: #14532d;
-  min-height: 44px;
+  min-height: 40px;
+  box-sizing: border-box;
 }
 
 .sos-mode-pill input {
