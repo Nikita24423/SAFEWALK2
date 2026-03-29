@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import BottomNav from "@/components/BottomNav";
 import { useLocale } from "@/components/LocaleProvider";
+import { useTheme } from "@/components/ThemeProvider";
 import { situationMessageKey } from "@/lib/i18n";
 import { requestCloseFakeCall, requestOpenFakeCall } from "@/lib/fakeCallEvents";
 
@@ -78,6 +79,7 @@ const initialProfile = {
 
 export default function ProfilePage() {
   const { t, locale, toggleLocale } = useLocale();
+  const { cycleTheme } = useTheme();
   const [profile, setProfile] = useState(initialProfile);
   const [saved, setSaved] = useState(false);
   const [saveError, setSaveError] = useState("");
@@ -852,6 +854,9 @@ export default function ProfilePage() {
               aria-label={locale === "ru" ? "English" : "Русский"}
             >
               {locale === "ru" ? "EN" : "RUS"}
+            </button>
+            <button type="button" className="btn-theme" onClick={cycleTheme} aria-label={t("themeCycleAria")}>
+              🎨
             </button>
           </div>
         </div>

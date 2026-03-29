@@ -4,10 +4,41 @@ import { useEffect, useRef, useState } from "react";
 import BottomNav from "@/components/BottomNav";
 import { useLocale } from "@/components/LocaleProvider";
 
+const CALL_VOICE_IDS = /** @type {const} */ (["dad", "mom", "acquaintance", "guardian"]);
+
+const CALL_VOICE_KEYS = {
+  dad: "callVoiceDad",
+  mom: "callVoiceMom",
+  acquaintance: "callVoiceAcquaintance",
+  guardian: "callVoiceGuardian",
+};
+
+const CALL_VOICE_STORAGE_KEY = "safewalk_call_voice";
+
 export default function CallPage() {
   const { t } = useLocale();
   const [callStarted, setCallStarted] = useState(false);
+  const [voiceId, setVoiceId] = useState(/** @type {string} */ ("dad"));
   const audioRef = useRef({ ctx: null, osc: null, gain: null });
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(CALL_VOICE_STORAGE_KEY);
+      if (raw && CALL_VOICE_IDS.includes(/** @type {any} */ (raw))) {
+        setVoiceId(raw);
+      }
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(CALL_VOICE_STORAGE_KEY, voiceId);
+    } catch {
+      /* ignore */
+    }
+  }, [voiceId]);
 
   useEffect(() => {
     if (!callStarted) {
@@ -64,6 +95,22 @@ export default function CallPage() {
 
         <div className="caller-info">
           <div className="caller-name">{t("callSecurityService")}</div>
+          <div className="call-voice-picker">
+            <div className="call-voice-row" role="radiogroup" aria-label={t("callVoiceLabel")}>
+              {CALL_VOICE_IDS.map((id) => (
+                <button
+                  key={id}
+                  type="button"
+                  className={`call-voice-pill ${voiceId === id ? "is-active" : ""}`}
+                  role="radio"
+                  aria-checked={voiceId === id}
+                  onClick={() => setVoiceId(id)}
+                >
+                  {t(CALL_VOICE_KEYS[id])}
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
 
         <div className="action-area">
