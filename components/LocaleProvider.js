@@ -8,18 +8,15 @@ import { DEFAULT_LOCALE, LOCALE_STORAGE_KEY, messages, translate } from "@/lib/i
 const LocaleContext = createContext(null);
 
 export function LocaleProvider({ children }) {
-  const [locale, setLocaleState] = useState(DEFAULT_LOCALE);
-
-  useEffect(() => {
+  const [locale, setLocaleState] = useState(() => {
     try {
+      if (typeof window === "undefined") return DEFAULT_LOCALE;
       const stored = localStorage.getItem(LOCALE_STORAGE_KEY);
-      if (stored === "en" || stored === "ru") {
-        setLocaleState(stored);
-      }
+      return stored === "en" || stored === "ru" ? stored : DEFAULT_LOCALE;
     } catch {
-      /* ignore */
+      return DEFAULT_LOCALE;
     }
-  }, []);
+  });
 
   useEffect(() => {
     try {

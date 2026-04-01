@@ -1,31 +1,3 @@
-"""
-SafeWalk — Telegram-бот (Aiogram 3) + HTTP API для Mini App.
-
-Локально:
-  pip install -r telegram_bot/requirements.txt
-  set BOT_TOKEN=... & set WEB_APP_URL=https://... & python telegram_bot/main.py
-
-PythonAnywhere (www.pythonanywhere.com):
-  1. Загрузите каталог telegram_bot, создайте venv, pip install -r requirements.txt
-  2. В Web → WSGI configuration укажите файл wsgi.py из этого каталога
-  3. В разделе Web → Environment variables (или в начале wsgi.py) задайте:
-     BOT_TOKEN, WEB_APP_URL, USE_WEBHOOK=1,
-     WEBHOOK_BASE_URL=https://ВАШ_ЛОГИН.pythonanywhere.com
-     TELEGRAM_WEBHOOK_PATH=случайная_длинная_строка (тот же путь в URL вебхука)
-     Опционально: TELEGRAM_WEBHOOK_SECRET_TOKEN (и тот же токен в @BotFather для вебхука)
-     SOS_SHARED_SECRET — если используется с Next.js
-  4. Reload сайта. На PythonAnywhere нельзя держать long polling в воркере — используется webhook.
-
-Переменные окружения:
-  BOT_TOKEN                    — токен @BotFather (обязательно)
-  WEB_APP_URL                  — HTTPS URL Mini App (кнопка в /start)
-  USE_WEBHOOK                  — 1 = webhook (нужно для PythonAnywhere), 0 = polling (локально)
-  WEBHOOK_BASE_URL             — https://логин.pythonanywhere.com (без слэша в конце)
-  TELEGRAM_WEBHOOK_PATH        — секретный сегмент пути, например a1b2c3d4e5f6
-  TELEGRAM_WEBHOOK_SECRET_TOKEN — опционально; заголовок X-Telegram-Bot-Api-Secret-Token
-  API_HOST / API_PORT          — только для локального uvicorn
-  SOS_SHARED_SECRET            — общий секрет с Next.js /api/sos (опционально)
-"""
 
 from __future__ import annotations
 
@@ -34,7 +6,22 @@ import logging
 import os
 import sys
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import Any
+
+
+def _load_dotenv() -> None:
+    """Подхватывает .env рядом с main.py, чтобы хватало одной команды: python main.py"""
+    try:
+        from dotenv import load_dotenv
+    except ImportError:
+        return
+    path = Path(__file__).resolve().parent / ".env"
+    if path.is_file():
+        load_dotenv(path)
+
+
+_load_dotenv()
 
 from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
@@ -62,11 +49,11 @@ TELEGRAM_WEBHOOK_SECRET_TOKEN = os.environ.get("TELEGRAM_WEBHOOK_SECRET_TOKEN", 
 # При импорте как WSGI-модуль (PythonAnywhere) не завершаем процесс — проверка токена при старте uvicorn
 _STANDALONE = __name__ == "__main__"
 if _STANDALONE and not BOT_TOKEN:
-    logger.error("Задайте переменную окружения BOT_TOKEN")
+    logger.error("Задайте BOT_TOKEN в .env рядом с main.py или в переменных окружения (см. env.sample)")
     sys.exit(1)
 
 if not BOT_TOKEN:
-    logger.warning("BOT_TOKEN пуст — задайте его в окружении PythonAnywhere (Web → env или файл wsgi.py)")
+    logger.warning("BOT_TOKEN пуст — задайте в .env или в окружении хостинга")
 
 # Формат токена нужен для импорта WSGI до подстановки env на PythonAnywhere; в работе обязателен реальный BOT_TOKEN
 _DUMMY_TG_TOKEN = "000000000:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
@@ -173,7 +160,11 @@ async def cmd_start(message: Message) -> None:
     )
     await message.answer(
         "Привет! Вы запустили бота <b>SafeWalk</b>.\n\n"
-        "Нажмите кнопку ниже, чтобы перейти в приложение и настроить маршрут, контакты и SOS.",
+        "Профиль: сценарий ситуации, маршрут, контакты, настройки ложного звонка. \n"
+        "SOS: отправка SOS контактам (ситуация + маршрут + геолокация при разрешении). \n"
+        "Тряска: экстренный вызов/ложный звонок и отправка SOS при встряске. \n"
+        "Звонок: экран «звонка» и роль голоса (сохранение настроек). \n"
+        "Ложный звонок: таймер и полноэкранная имитация входящего.\n",
         reply_markup=keyboard,
     )
 
@@ -323,4 +314,5 @@ if TELEGRAM_WEBHOOK_PATH:
 
 
 if __name__ == "__main__":
+    logger.info("SafeWalk: API http://%s:%s  health: http://127.0.0.1:%s/health", API_HOST, API_PORT, API_PORT)
     uvicorn.run(app, host=API_HOST, port=API_PORT)

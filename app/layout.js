@@ -15,7 +15,7 @@ export const viewport = {
 
 export default function RootLayout({ children }) {
   return (
-    <html lang="ru">
+    <html lang="en">
       <body>
         <ClientProviders>
           <Script src="https://telegram.org/js/telegram-web-app.js" strategy="afterInteractive" />
